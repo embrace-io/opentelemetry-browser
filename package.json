@@ -16,18 +16,25 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "build": "vite build",
+    "check-types": "tsc --noEmit",
     "lint": "biome format --write ."
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.7",
     "@commitlint/cli": "20.1.0",
     "@commitlint/config-conventional": "20.0.0",
-    "lefthook": "2.0.0"
+    "lefthook": "2.0.0",
+    "turbo": "2.5.8"
   },
   "peerDependencies": {
     "typescript": "5.9.3"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "commitlint": {
     "extends": "@commitlint/config-conventional"
-  }
+  },
+  "packageManager": "npm@11.6.1"
 }
