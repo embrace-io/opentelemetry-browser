@@ -138,6 +138,25 @@ describe('WebVitalsInstrumentation', () => {
         inpLog.attributes[ATTR_WEB_VITAL_ATTRIBUTION_LOAD_STATE],
       ).toBeDefined();
     });
+
+    it('should use interaction time as timestamp', async () => {
+      instrumentation = new WebVitalsInstrumentation();
+      createButton('Timestamp test');
+
+      await triggerINP('Timestamp test');
+      const afterCallback = Date.now();
+
+      const inpLog = await waitForMetric('inp');
+
+      // hrTime is [seconds, nanoseconds] since Unix epoch
+      const [seconds, nanos] = inpLog.hrTime;
+      const timestampMs = seconds * 1000 + nanos / 1_000_000;
+
+      // Timestamp should be from the interaction, which is before the callback fired
+      expect(timestampMs).toBeLessThan(afterCallback);
+      // And after page load (timeOrigin)
+      expect(timestampMs).toBeGreaterThan(performance.timeOrigin);
+    });
   });
 
   describe('CLS metric', () => {
@@ -177,6 +196,39 @@ describe('WebVitalsInstrumentation', () => {
       expect(
         clsLog.attributes[ATTR_WEB_VITAL_ATTRIBUTION_LOAD_STATE],
       ).toBeDefined();
+    });
+
+    it('should use largest shift time as timestamp', async () => {
+      instrumentation = new WebVitalsInstrumentation();
+
+      const shifter = document.createElement('div');
+      shifter.style.cssText =
+        'width: 100px; height: 100px; background: red; position: relative;';
+      testContainer.appendChild(shifter);
+
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      await new Promise((r) => setTimeout(r, 100));
+
+      const pusher = document.createElement('div');
+      pusher.style.cssText = 'width: 100px; height: 200px; background: blue;';
+      testContainer.insertBefore(pusher, shifter);
+
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      await new Promise((r) => setTimeout(r, 100));
+
+      const beforeCallback = Date.now();
+      triggerVisibilityChange();
+
+      const clsLog = await waitForMetric('cls');
+
+      // hrTime is [seconds, nanoseconds] since Unix epoch
+      const [seconds, nanos] = clsLog.hrTime;
+      const timestampMs = seconds * 1000 + nanos / 1_000_000;
+
+      // Timestamp should be from the shift, which is before the callback fired
+      expect(timestampMs).toBeLessThan(beforeCallback);
+      // And after page load (timeOrigin)
+      expect(timestampMs).toBeGreaterThan(performance.timeOrigin);
     });
   });
 

@@ -127,6 +127,29 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
     this._diag.debug('Instrumentation disabled, pausing emission');
   }
 
+  /**
+   * Gets the timestamp for a metric based on attribution timing.
+   * Returns undefined to let OTel use the current time for metrics without
+   * specific timing information.
+   */
+  private _getTimestampForMetric(
+    metric: MetricWithAttribution,
+  ): number | undefined {
+    if (metric.name === 'CLS') {
+      const { attribution } = metric as CLSMetricWithAttribution;
+      if (attribution.largestShiftTime) {
+        return performance.timeOrigin + attribution.largestShiftTime;
+      }
+    }
+    if (metric.name === 'INP') {
+      const { attribution } = metric as INPMetricWithAttribution;
+      if (attribution.interactionTime) {
+        return performance.timeOrigin + attribution.interactionTime;
+      }
+    }
+    return undefined;
+  }
+
   private _emitWebVital(metric: MetricWithAttribution): void {
     if (!this._isEnabled) {
       return;
@@ -141,10 +164,14 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
       ...this._extractAttribution(metric),
     };
 
+    // Use attribution timing for accurate event timestamps when available
+    const timestamp = this._getTimestampForMetric(metric);
+
     const logRecord: LogRecord = {
       eventName: WEB_VITAL_EVENT_NAME,
       severityNumber: SeverityNumber.INFO,
       attributes,
+      ...(timestamp !== undefined ? { timestamp } : {}),
     };
 
     if (this._applyCustomLogRecordData) {
