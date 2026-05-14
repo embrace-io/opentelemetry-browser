@@ -187,6 +187,26 @@ describe('WebVitalsInstrumentation', () => {
       const inpLog = await waitForMetric('inp');
       expect(inpLog.attributes[ATTR_WEB_VITAL_NAME]).toBe('inp');
     });
+
+    it('should emit each metric exactly once per interaction across enable/disable cycles', async () => {
+      // web-vitals callbacks can't be unsubscribed, so disable() must NOT
+      // re-register them on the next enable(). A regression where the
+      // _listenersRegistered guard is removed would double-emit per metric.
+      instrumentation.enable();
+      instrumentation.disable();
+      instrumentation.enable();
+      instrumentation.disable();
+      instrumentation.enable();
+
+      createButton('Cycle test');
+      await triggerINP('Cycle test');
+      await waitForMetric('inp');
+
+      const inpLogs = getWebVitalLogs().filter(
+        (log) => log.attributes[ATTR_WEB_VITAL_NAME] === 'inp',
+      );
+      expect(inpLogs).toHaveLength(1);
+    });
   });
 
   describe('includeRawAttribution', () => {
