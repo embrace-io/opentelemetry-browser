@@ -53,10 +53,25 @@ export abstract class InstrumentationBase<
     // run their setup/teardown exactly once.
     this._config = { ...config, enabled: wasEnabled };
 
-    if (targetEnabled && !wasEnabled) {
-      this.enable();
-    } else if (!targetEnabled && wasEnabled) {
-      this.disable();
+    // If the subclass throws partway through enable()/disable(), the instance
+    // may be left in an inconsistent state (handlers half-installed, _enabled
+    // out of sync with actual side effects). Log a clear diagnostic before
+    // rethrowing so callers can correlate the partial transition with the
+    // surfacing error.
+    try {
+      if (targetEnabled && !wasEnabled) {
+        this.enable();
+      } else if (!targetEnabled && wasEnabled) {
+        this.disable();
+      }
+    } catch (err) {
+      this._diag.error(
+        `setConfig transition (enabled: ${String(wasEnabled)} -> ${String(
+          targetEnabled,
+        )}) threw. instance may be in a partially-applied state`,
+        err,
+      );
+      throw err;
     }
   }
 

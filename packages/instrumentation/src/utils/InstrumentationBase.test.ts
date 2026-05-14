@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DiagLogLevel, diag } from '@opentelemetry/api';
+import type { DiagLogger } from '@opentelemetry/api';
 import type { InstrumentationConfig } from '@opentelemetry/instrumentation';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstrumentationBase } from './InstrumentationBase.ts';
 
 interface TestConfig extends InstrumentationConfig {
@@ -44,6 +46,37 @@ class TestInstrumentation extends InstrumentationBase<TestConfig> {
 
   writeEnabled(value: boolean): void {
     this._enabled = value;
+  }
+}
+
+class ThrowingInstrumentation extends InstrumentationBase<TestConfig> {
+  public throwOn: 'enable' | 'disable' | 'none' = 'none';
+
+  constructor(config: TestConfig = {}) {
+    super('throwing-instrumentation', '0.0.0', config);
+    if (config.enabled === true) {
+      this.enable();
+    }
+  }
+
+  override enable(): void {
+    if (this._enabled) {
+      return;
+    }
+    this._enabled = true;
+    if (this.throwOn === 'enable') {
+      throw new Error('enable boom');
+    }
+  }
+
+  override disable(): void {
+    if (!this._enabled) {
+      return;
+    }
+    this._enabled = false;
+    if (this.throwOn === 'disable') {
+      throw new Error('disable boom');
+    }
   }
 }
 
@@ -192,6 +225,78 @@ describe('InstrumentationBase', () => {
       inst.setConfig({ enabled: true, marker: 'still-on' });
       expect(inst.enableCount).toBe(1);
       expect(inst.disableCount).toBe(0);
+    });
+  });
+
+  describe('setConfig error handling', () => {
+    let errorMock: ReturnType<
+      typeof vi.fn<(message: string, ...args: unknown[]) => void>
+    >;
+
+    beforeEach(() => {
+      errorMock = vi.fn<(message: string, ...args: unknown[]) => void>();
+      const fakeLogger: DiagLogger = {
+        verbose: () => {},
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: errorMock,
+      };
+      diag.setLogger(fakeLogger, DiagLogLevel.ALL);
+    });
+
+    afterEach(() => {
+      diag.disable();
+    });
+
+    it('logs and rethrows when enable() throws during setConfig transition', () => {
+      const inst = new ThrowingInstrumentation();
+      inst.throwOn = 'enable';
+
+      expect(() =>
+        inst.setConfig({ enabled: true, marker: 'turning-on' }),
+      ).toThrow('enable boom');
+
+      // componentLogger prepends the instrumentation name; the message we
+      // emitted lives at call[1].
+      const sawTransitionLog = errorMock.mock.calls.some((call) => {
+        const message = call[1];
+        return (
+          typeof message === 'string' &&
+          message.includes('setConfig transition') &&
+          message.includes('false -> true')
+        );
+      });
+      expect(sawTransitionLog).toBe(true);
+    });
+
+    it('logs and rethrows when disable() throws during setConfig transition', () => {
+      const inst = new ThrowingInstrumentation({ enabled: true });
+      inst.throwOn = 'disable';
+
+      expect(() =>
+        inst.setConfig({ enabled: false, marker: 'turning-off' }),
+      ).toThrow('disable boom');
+
+      const sawTransitionLog = errorMock.mock.calls.some((call) => {
+        const message = call[1];
+        return (
+          typeof message === 'string' &&
+          message.includes('setConfig transition') &&
+          message.includes('true -> false')
+        );
+      });
+      expect(sawTransitionLog).toBe(true);
+    });
+
+    it('does not log when no transition occurs and subclass would throw', () => {
+      const inst = new ThrowingInstrumentation({ enabled: true });
+      inst.throwOn = 'enable';
+
+      expect(() =>
+        inst.setConfig({ enabled: true, marker: 'no-transition' }),
+      ).not.toThrow();
+      expect(errorMock).not.toHaveBeenCalled();
     });
   });
 });
