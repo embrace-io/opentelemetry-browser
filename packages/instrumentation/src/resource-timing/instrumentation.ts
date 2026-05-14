@@ -77,9 +77,9 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
     if (this._enabled) {
       return;
     }
-    if (!('PerformanceObserver' in window)) {
+    if (typeof PerformanceObserver === 'undefined') {
       this._diag.debug(
-        'PerformanceObserver is not supported, resource timings will not be collected',
+        'PerformanceObserver not supported, resource timings will not be collected',
       );
       return;
     }
