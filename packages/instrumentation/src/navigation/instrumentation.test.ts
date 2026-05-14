@@ -189,6 +189,25 @@ describe('NavigationInstrumentation', () => {
 
       expect(getNavigationLogs()).toHaveLength(1);
     });
+
+    it('should emit a hard-navigation event at most once per page lifecycle across disable/enable', () => {
+      setReadyState('complete');
+      instrumentation = new NavigationInstrumentation({ enabled: false });
+
+      instrumentation.enable();
+      expect(getNavigationLogs()).toHaveLength(1);
+
+      instrumentation.disable();
+      instrumentation.enable();
+      instrumentation.disable();
+      instrumentation.enable();
+
+      const hardNavLogs = getNavigationLogs().filter(
+        (log) =>
+          log.attributes[ATTR_BROWSER_NAVIGATION_SAME_DOCUMENT] === false,
+      );
+      expect(hardNavLogs).toHaveLength(1);
+    });
   });
 
   describe('history API patching', () => {
