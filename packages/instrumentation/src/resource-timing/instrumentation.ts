@@ -73,18 +73,17 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
     }
   }
 
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
+  protected override _canEnable(): boolean {
     if (typeof PerformanceObserver === 'undefined') {
       this._diag.debug(
         'PerformanceObserver not supported, resource timings will not be collected',
       );
-      return;
+      return false;
     }
-    this._enabled = true;
+    return true;
+  }
 
+  protected _onEnable(): void {
     if (document.readyState === 'complete') {
       this._setupObserver();
     } else {
@@ -103,11 +102,7 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
     );
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
     this._flush();
     this._observer?.disconnect();
     this._observer = undefined;

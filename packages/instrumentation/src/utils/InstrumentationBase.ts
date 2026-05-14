@@ -11,19 +11,28 @@ import type { InstrumentationConfig } from '@opentelemetry/instrumentation';
 import { InstrumentationBase as CoreInstrumentationBase } from '@opentelemetry/instrumentation/build/esm/platform/browser/instrumentation.js';
 
 /**
- * Browser instrumentation base. Wraps upstream `InstrumentationBase` to:
- *  - suppress its constructor-time `enable()` call, which fires before
- *    subclass class-field initializers and would clobber their state,
- *  - default to disabled (callers opt in with `{ enabled: true }`),
- *  - expose `_config.enabled` as the single source of truth via `isEnabled()`
- *    for external callers and the protected `_enabled` accessor for subclasses,
- *  - route enable/disable transitions through `setConfig` so callers can flip
- *    state plus update other config fields in a single call. If `enabled` is
- *    omitted from the new config the current state is preserved (the upstream
- *    `setConfig` would otherwise default it to `true` and surprise-enable).
+ * Browser instrumentation base.
  *
- * Subclasses implement `enable()` / `disable()` and flip state with
- * `this._enabled = true | false`.
+ * Wraps upstream `InstrumentationBase` to:
+ *  - Suppress its constructor-time `enable()` call, which fires before
+ *    subclass class-field initializers and would clobber their state.
+ *  - Default to disabled. Callers opt in via `{ enabled: true }` or by
+ *    calling `.enable()` after construction.
+ *  - Expose `_config.enabled` as the single source of truth via the public
+ *    `isEnabled()` and the protected `_enabled` getter.
+ *  - Route enable/disable through a template-method pattern: subclasses
+ *    implement `_onEnable()` / `_onDisable()` (and may override `_canEnable()`
+ *    to veto a transition, e.g. for unsupported browsers). The base owns the
+ *    idempotency guard and the `_config.enabled` write, so the invariant
+ *    "after enable() returns isEnabled() is true" cannot drift per subclass.
+ *  - Override `setConfig` so callers can flip state and update other config
+ *    fields atomically. Omitting `enabled` from the new config preserves the
+ *    current state (upstream's setConfig would otherwise default it to true
+ *    and surprise-enable).
+ *
+ * `enable()` and `disable()` are intentionally not `abstract` and should not
+ * be overridden by subclasses. The template-method hooks below are the
+ * extension points.
  */
 export abstract class InstrumentationBase<
   ConfigType extends InstrumentationConfig = InstrumentationConfig,
@@ -39,25 +48,55 @@ export abstract class InstrumentationBase<
     });
   }
 
+  /**
+   * Public accessor. Reads from `_config.enabled` so it cannot drift from
+   * what the lifecycle methods have actually applied.
+   */
   isEnabled(): boolean {
     return this._enabled;
   }
 
+  /**
+   * Final. Do not override. Subclasses implement `_onEnable()` (and optionally
+   * `_canEnable()`) for setup logic.
+   */
+  override enable(): void {
+    if (this._enabled) {
+      return;
+    }
+    if (!this._canEnable()) {
+      return;
+    }
+    this._config = { ...this._config, enabled: true };
+    this._onEnable();
+  }
+
+  /**
+   * Final. Do not override. Subclasses implement `_onDisable()` for teardown.
+   */
+  override disable(): void {
+    if (!this._enabled) {
+      return;
+    }
+    this._config = { ...this._config, enabled: false };
+    this._onDisable();
+  }
+
   override setConfig(config: ConfigType): void {
     const wasEnabled = this._enabled;
-    const targetEnabled =
-      config.enabled === undefined ? wasEnabled : config.enabled === true;
+    const targetEnabled = config.enabled ?? wasEnabled;
 
-    // Preserve the old enabled flag in the new config so the subclass's
-    // enable()/disable() short-circuit guards see the previous state and
-    // run their setup/teardown exactly once.
+    // Preserve the old enabled flag in the new config so the base lifecycle
+    // guards below still see the previous state when enable()/disable() runs.
+    // Non-transition setConfig calls (off-off, on-on) leave _config.enabled
+    // at the pre-call value and the other fields take effect immediately.
     this._config = { ...config, enabled: wasEnabled };
 
-    // If the subclass throws partway through enable()/disable(), the instance
-    // may be left in an inconsistent state (handlers half-installed, _enabled
-    // out of sync with actual side effects). Log a clear diagnostic before
-    // rethrowing so callers can correlate the partial transition with the
-    // surfacing error.
+    // If the subclass throws partway through _onEnable/_onDisable, the
+    // instance may be left in an inconsistent state (handlers half-installed,
+    // _enabled out of sync with actual side effects). Log a clear diagnostic
+    // before rethrowing so callers can correlate the partial transition with
+    // the surfacing error.
     try {
       if (targetEnabled && !wasEnabled) {
         this.enable();
@@ -75,14 +114,44 @@ export abstract class InstrumentationBase<
     }
   }
 
+  /**
+   * Read-only protected accessor for subclasses to check the lifecycle flag
+   * from inside handlers or patched methods. Writes are intentionally not
+   * exposed; state transitions go through `enable()` / `disable()`.
+   */
   protected get _enabled(): boolean {
     return this._config.enabled === true;
   }
 
-  protected set _enabled(value: boolean) {
-    this._config = { ...this._config, enabled: value };
+  /**
+   * Veto hook for `enable()`. Default returns true (always allowed).
+   * Subclasses can override to short-circuit `enable()` when the runtime is
+   * missing a required capability (e.g. PerformanceObserver). When this
+   * returns false, the base does not flip `_enabled` and does not call
+   * `_onEnable()`, so `isEnabled()` stays false and a subsequent `enable()`
+   * call can try again (useful when capability detection is dynamic).
+   */
+  protected _canEnable(): boolean {
+    return true;
   }
 
+  /**
+   * Required side-effect hook. Runs after the base flips `_enabled` to true.
+   * Subclasses install listeners, patch globals, etc. here.
+   */
+  protected abstract _onEnable(): void;
+
+  /**
+   * Required teardown hook. Runs after the base flips `_enabled` to false.
+   * Subclasses remove listeners, restore globals, etc. here.
+   */
+  protected abstract _onDisable(): void;
+
+  /**
+   * Final. Upstream uses `init()` to declare Node-style module patches; in
+   * the browser there is nothing to patch this way. Subclasses must not
+   * override this method.
+   */
   protected override init() {
     return [];
   }

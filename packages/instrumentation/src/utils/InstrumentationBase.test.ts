@@ -24,28 +24,41 @@ class TestInstrumentation extends InstrumentationBase<TestConfig> {
     }
   }
 
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
-    this._enabled = true;
+  protected _onEnable(): void {
     this.enableCount++;
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
     this.disableCount++;
   }
 
   readEnabled(): boolean {
     return this._enabled;
   }
+}
 
-  writeEnabled(value: boolean): void {
-    this._enabled = value;
+class VetoableInstrumentation extends InstrumentationBase<TestConfig> {
+  public allowEnable = false;
+  public enableCount = 0;
+  public disableCount = 0;
+
+  constructor(config: TestConfig = {}) {
+    super('vetoable-instrumentation', '0.0.0', config);
+    if (config.enabled === true) {
+      this.enable();
+    }
+  }
+
+  protected override _canEnable(): boolean {
+    return this.allowEnable;
+  }
+
+  protected _onEnable(): void {
+    this.enableCount++;
+  }
+
+  protected _onDisable(): void {
+    this.disableCount++;
   }
 }
 
@@ -59,21 +72,13 @@ class ThrowingInstrumentation extends InstrumentationBase<TestConfig> {
     }
   }
 
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
-    this._enabled = true;
+  protected _onEnable(): void {
     if (this.throwOn === 'enable') {
       throw new Error('enable boom');
     }
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
     if (this.throwOn === 'disable') {
       throw new Error('disable boom');
     }
@@ -129,16 +134,39 @@ describe('InstrumentationBase', () => {
       inst.disable();
       expect(inst.readEnabled()).toBe(false);
     });
+  });
 
-    it('_enabled setter updates config.enabled', () => {
-      const inst = new TestInstrumentation();
-      inst.writeEnabled(true);
-      expect(inst.getConfig().enabled).toBe(true);
-      expect(inst.isEnabled()).toBe(true);
+  describe('_canEnable veto', () => {
+    it('does not flip _enabled or call _onEnable when _canEnable returns false', () => {
+      const inst = new VetoableInstrumentation();
+      inst.allowEnable = false;
 
-      inst.writeEnabled(false);
-      expect(inst.getConfig().enabled).toBe(false);
+      inst.enable();
+
       expect(inst.isEnabled()).toBe(false);
+      expect(inst.enableCount).toBe(0);
+    });
+
+    it('allows enable() to succeed on a later call once _canEnable returns true', () => {
+      const inst = new VetoableInstrumentation();
+      inst.allowEnable = false;
+      inst.enable();
+      expect(inst.isEnabled()).toBe(false);
+
+      inst.allowEnable = true;
+      inst.enable();
+      expect(inst.isEnabled()).toBe(true);
+      expect(inst.enableCount).toBe(1);
+    });
+
+    it('setConfig with enabled:true respects the _canEnable veto', () => {
+      const inst = new VetoableInstrumentation();
+      inst.allowEnable = false;
+
+      inst.setConfig({ enabled: true });
+
+      expect(inst.isEnabled()).toBe(false);
+      expect(inst.enableCount).toBe(0);
     });
   });
 

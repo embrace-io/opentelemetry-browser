@@ -64,12 +64,7 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
     }
   }
 
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
-    this._enabled = true;
-
+  protected _onEnable(): void {
     // Try emitting immediately (e.g. when enabled after load),
     // otherwise schedule for `load` or fall back to unload.
     this._tryEmitOrSchedule();
@@ -80,11 +75,7 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
     window.addEventListener('pagehide', this._onPageHide);
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
     this._unsubscribeAll();
     this._lastEntry = undefined;
     this._didEmit = false;

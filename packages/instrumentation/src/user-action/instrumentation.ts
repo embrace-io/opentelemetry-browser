@@ -94,12 +94,7 @@ export class UserActionInstrumentation extends InstrumentationBase<UserActionIns
     });
   }
 
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
-    this._enabled = true;
-
+  protected _onEnable(): void {
     const autoCapturedActions =
       this._config.autoCapturedActions ?? DEFAULT_AUTO_CAPTURED_ACTIONS;
     if (!this._onClickHandler) {
@@ -111,11 +106,7 @@ export class UserActionInstrumentation extends InstrumentationBase<UserActionIns
     }
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
     if (this._onClickHandler) {
       document.removeEventListener('click', this._onClickHandler, true);
     }

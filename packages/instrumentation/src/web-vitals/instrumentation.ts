@@ -44,24 +44,22 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
     }
   }
 
-  /**
-   * Listeners are registered once per instance; because web-vitals can't
-   * unsubscribe, disable() leaves them in place and only pauses emission.
-   * A subsequent enable() resumes emission without re-registering. No-op on
-   * browsers without PerformanceObserver.
-   */
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
+  protected override _canEnable(): boolean {
     if (typeof PerformanceObserver === 'undefined') {
       this._diag.debug(
         'PerformanceObserver not supported, web vitals will not be collected',
       );
-      return;
+      return false;
     }
-    this._enabled = true;
+    return true;
+  }
 
+  /**
+   * Listeners are registered once per instance; because web-vitals can't
+   * unsubscribe, disable() leaves them in place and only pauses emission.
+   * A subsequent enable() resumes emission without re-registering.
+   */
+  protected _onEnable(): void {
     if (this._listenersRegistered) {
       this._diag.debug('Listeners already registered, resuming emission');
       return;
@@ -78,11 +76,7 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
     onTTFB((metric) => this._emitWebVital(metric));
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
     this._diag.debug('Instrumentation disabled, pausing emission');
   }
 

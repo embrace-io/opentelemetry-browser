@@ -68,12 +68,7 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
     }
   }
 
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
-    this._enabled = true;
-
+  protected _onEnable(): void {
     const navigationApi = this._getNavigationApi();
 
     // Only patch history API if Navigation API is not being used.
@@ -100,12 +95,7 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
     }
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
-
+  protected _onDisable(): void {
     if (this._onDOMContentLoaded) {
       document.removeEventListener(
         'DOMContentLoaded',

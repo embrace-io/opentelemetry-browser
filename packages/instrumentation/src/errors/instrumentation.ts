@@ -28,21 +28,13 @@ export class ErrorsInstrumentation extends InstrumentationBase<ErrorsInstrumenta
     }
   }
 
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
-    this._enabled = true;
+  protected _onEnable(): void {
     this._onErrorHandler = (event) => this._onError(event);
     window.addEventListener('error', this._onErrorHandler);
     window.addEventListener('unhandledrejection', this._onErrorHandler);
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
     if (this._onErrorHandler) {
       window.removeEventListener('error', this._onErrorHandler);
       window.removeEventListener('unhandledrejection', this._onErrorHandler);

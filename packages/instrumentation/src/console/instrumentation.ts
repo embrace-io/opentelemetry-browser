@@ -103,11 +103,7 @@ export class ConsoleInstrumentation extends InstrumentationBase<ConsoleInstrumen
    * cycles only flip the enabled flag; wrappers stay installed (gated on
    * `_enabled`) so callers that captured them keep working.
    */
-  override enable(): void {
-    if (this._enabled) {
-      return;
-    }
-    this._enabled = true;
+  protected _onEnable(): void {
     if (this._isPatched) {
       return;
     }
@@ -119,10 +115,8 @@ export class ConsoleInstrumentation extends InstrumentationBase<ConsoleInstrumen
     }
   }
 
-  override disable(): void {
-    if (!this._enabled) {
-      return;
-    }
-    this._enabled = false;
+  protected _onDisable(): void {
+    // Wrappers remain installed and gate on `_enabled` instead, so there is
+    // nothing to undo here.
   }
 }
