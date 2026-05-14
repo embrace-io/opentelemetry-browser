@@ -57,6 +57,23 @@ registerInstrumentations({
 });
 ```
 
+## Lifecycle
+
+Every instrumentation in this package is **disabled on construction by default**. `registerInstrumentations({ instrumentations: [...] })` enables each one for you, which is why the example above works without any extra setup.
+
+If you construct an instrumentation standalone (without `registerInstrumentations`), you must opt in to side effects either by passing `{ enabled: true }` or by calling `.enable()`:
+
+```typescript
+// Opt in via config
+const errors = new ErrorsInstrumentation({ enabled: true });
+
+// or opt in imperatively
+const webVitals = new WebVitalsInstrumentation();
+webVitals.enable();
+```
+
+Use `instrumentation.isEnabled()` to read the current state. `setConfig({ enabled, ... })` updates other config fields and transitions the lifecycle in a single call; omitting `enabled` preserves the current state.
+
 ---
 
 ### Navigation
