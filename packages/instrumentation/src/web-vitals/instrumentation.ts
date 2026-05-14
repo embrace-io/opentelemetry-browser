@@ -65,15 +65,32 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
       return;
     }
 
-    this._listenersRegistered = true;
     this._diag.debug(`Registering listeners`);
-    // CLS is only supported in Chromium. See:
+    // Each registration is isolated: a vital whose underlying observer type
+    // isn't supported by the browser (CLS uses LayoutShift, INP uses
+    // EventTiming, etc.) throws synchronously from the web-vitals library.
+    // Catch per-vital so a single unsupported entry type does not quarantine
+    // the others. CLS is only supported in Chromium. See:
     // https://github.com/GoogleChrome/web-vitals?tab=readme-ov-file#browser-support
-    onCLS((metric) => this._emitWebVital(metric));
-    onINP((metric) => this._emitWebVital(metric));
-    onLCP((metric) => this._emitWebVital(metric));
-    onFCP((metric) => this._emitWebVital(metric));
-    onTTFB((metric) => this._emitWebVital(metric));
+    const tryRegister = (
+      name: 'CLS' | 'INP' | 'LCP' | 'FCP' | 'TTFB',
+      subscribe: (cb: (metric: MetricWithAttribution) => void) => void,
+    ) => {
+      try {
+        subscribe((metric) => this._emitWebVital(metric));
+      } catch (e) {
+        this._diag.error(`failed to register ${name} listener`, e);
+      }
+    };
+    tryRegister('CLS', onCLS);
+    tryRegister('INP', onINP);
+    tryRegister('LCP', onLCP);
+    tryRegister('FCP', onFCP);
+    tryRegister('TTFB', onTTFB);
+
+    // Set the guard only after all attempts complete so a throw above does
+    // not lock us into "already registered" mode on a future enable() retry.
+    this._listenersRegistered = true;
   }
 
   protected _onDisable(): void {
