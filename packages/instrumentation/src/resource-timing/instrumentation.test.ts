@@ -96,6 +96,20 @@ describe('ResourceTimingInstrumentation', () => {
   });
 
   describe('Instrumentation lifecycle', () => {
+    it('should not create a PerformanceObserver when constructed without a config', () => {
+      instrumentation = new ResourceTimingInstrumentation();
+
+      expect(instrumentation.isEnabled()).toBe(false);
+      expect(PerformanceObserverMock).not.toHaveBeenCalled();
+    });
+
+    it('should not create a PerformanceObserver when constructed with enabled: false', () => {
+      instrumentation = new ResourceTimingInstrumentation({ enabled: false });
+
+      expect(instrumentation.isEnabled()).toBe(false);
+      expect(PerformanceObserverMock).not.toHaveBeenCalled();
+    });
+
     it('should wait for load event when document not ready', () => {
       const listeners = new Map();
       vi.stubGlobal('document', {

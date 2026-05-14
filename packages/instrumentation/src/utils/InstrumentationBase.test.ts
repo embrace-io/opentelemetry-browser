@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DiagLogLevel, diag } from '@opentelemetry/api';
 import type { DiagLogger } from '@opentelemetry/api';
+import { DiagLogLevel, diag } from '@opentelemetry/api';
 import type { InstrumentationConfig } from '@opentelemetry/instrumentation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstrumentationBase } from './InstrumentationBase.ts';

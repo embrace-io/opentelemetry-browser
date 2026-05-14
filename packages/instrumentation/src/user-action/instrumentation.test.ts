@@ -6,7 +6,15 @@
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import type { InMemoryLogRecordExporter } from '@opentelemetry/sdk-logs';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { setupTestLogExporter } from '#utils/test';
 import { UserActionInstrumentation } from './instrumentation.ts';
 
@@ -141,5 +149,31 @@ describe('UserActionInstrumentation', () => {
 
     const logs = inMemoryExporter.getFinishedLogRecords();
     expect(logs.length).toBe(0);
+  });
+});
+
+describe('UserActionInstrumentation construction (no autoLoader)', () => {
+  it('should not install a click listener when constructed without a config', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
+
+    const instrumentation = new UserActionInstrumentation();
+
+    expect(instrumentation.isEnabled()).toBe(false);
+    const clickCalls = addSpy.mock.calls.filter((c) => c[0] === 'click');
+    expect(clickCalls).toHaveLength(0);
+
+    addSpy.mockRestore();
+  });
+
+  it('should not install a click listener when constructed with enabled: false', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
+
+    const instrumentation = new UserActionInstrumentation({ enabled: false });
+
+    expect(instrumentation.isEnabled()).toBe(false);
+    const clickCalls = addSpy.mock.calls.filter((c) => c[0] === 'click');
+    expect(clickCalls).toHaveLength(0);
+
+    addSpy.mockRestore();
   });
 });

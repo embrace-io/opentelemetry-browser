@@ -75,6 +75,54 @@ describe('NavigationInstrumentation', () => {
       expect(instrumentation).toBeInstanceOf(NavigationInstrumentation);
     });
 
+    it('should not patch history or install listeners when constructed without a config', () => {
+      const originalPushState = window.history.pushState;
+      const originalReplaceState = window.history.replaceState;
+      const addWindowSpy = vi.spyOn(window, 'addEventListener');
+      const addDocSpy = vi.spyOn(document, 'addEventListener');
+
+      instrumentation = new NavigationInstrumentation();
+
+      expect(instrumentation.isEnabled()).toBe(false);
+      expect(window.history.pushState).toBe(originalPushState);
+      expect(window.history.replaceState).toBe(originalReplaceState);
+      const popstateCalls = addWindowSpy.mock.calls.filter(
+        (c) => c[0] === 'popstate',
+      );
+      const domContentLoadedCalls = addDocSpy.mock.calls.filter(
+        (c) => c[0] === 'DOMContentLoaded',
+      );
+      expect(popstateCalls).toHaveLength(0);
+      expect(domContentLoadedCalls).toHaveLength(0);
+
+      addWindowSpy.mockRestore();
+      addDocSpy.mockRestore();
+    });
+
+    it('should not patch history or install listeners when constructed with enabled: false', () => {
+      const originalPushState = window.history.pushState;
+      const originalReplaceState = window.history.replaceState;
+      const addWindowSpy = vi.spyOn(window, 'addEventListener');
+      const addDocSpy = vi.spyOn(document, 'addEventListener');
+
+      instrumentation = new NavigationInstrumentation({ enabled: false });
+
+      expect(instrumentation.isEnabled()).toBe(false);
+      expect(window.history.pushState).toBe(originalPushState);
+      expect(window.history.replaceState).toBe(originalReplaceState);
+      const popstateCalls = addWindowSpy.mock.calls.filter(
+        (c) => c[0] === 'popstate',
+      );
+      const domContentLoadedCalls = addDocSpy.mock.calls.filter(
+        (c) => c[0] === 'DOMContentLoaded',
+      );
+      expect(popstateCalls).toHaveLength(0);
+      expect(domContentLoadedCalls).toHaveLength(0);
+
+      addWindowSpy.mockRestore();
+      addDocSpy.mockRestore();
+    });
+
     it('should enable and disable without errors', () => {
       instrumentation = new NavigationInstrumentation({ enabled: false });
       expect(() => {

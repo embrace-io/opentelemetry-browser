@@ -87,6 +87,38 @@ describe('ErrorsInstrumentation', () => {
       expect(instrumentation).toBeInstanceOf(ErrorsInstrumentation);
     });
 
+    it('should not install listeners when constructed without a config', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+
+      instrumentation = new ErrorsInstrumentation();
+
+      expect(instrumentation.isEnabled()).toBe(false);
+      const errorCalls = addSpy.mock.calls.filter((c) => c[0] === 'error');
+      const rejectionCalls = addSpy.mock.calls.filter(
+        (c) => c[0] === 'unhandledrejection',
+      );
+      expect(errorCalls).toHaveLength(0);
+      expect(rejectionCalls).toHaveLength(0);
+
+      addSpy.mockRestore();
+    });
+
+    it('should not install listeners when constructed with enabled: false', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+
+      instrumentation = new ErrorsInstrumentation({ enabled: false });
+
+      expect(instrumentation.isEnabled()).toBe(false);
+      const errorCalls = addSpy.mock.calls.filter((c) => c[0] === 'error');
+      const rejectionCalls = addSpy.mock.calls.filter(
+        (c) => c[0] === 'unhandledrejection',
+      );
+      expect(errorCalls).toHaveLength(0);
+      expect(rejectionCalls).toHaveLength(0);
+
+      addSpy.mockRestore();
+    });
+
     it('should enable and disable without errors', () => {
       instrumentation = new ErrorsInstrumentation({ enabled: false });
       expect(() => {
