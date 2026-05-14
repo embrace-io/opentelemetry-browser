@@ -6,16 +6,14 @@
 import type { Attributes } from '@opentelemetry/api';
 import type { LogRecord } from '@opentelemetry/api-logs';
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import {
-  InstrumentationBase,
-  safeExecuteInTheMiddle,
-} from '@opentelemetry/instrumentation';
+import { safeExecuteInTheMiddle } from '@opentelemetry/instrumentation';
 import type {
   CLSMetricWithAttribution,
   INPMetricWithAttribution,
   MetricWithAttribution,
 } from 'web-vitals/attribution';
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
+import { InstrumentationBase } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import {
   ATTR_WEB_VITAL_DELTA,
@@ -37,37 +35,32 @@ import type { WebVitalsInstrumentationConfig } from './types.ts';
  * listeners remain active. Calling `enable()` again will resume emission.
  */
 export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstrumentationConfig> {
-  // Using `declare` is required here: InstrumentationBase calls enable() during
-  // construction, and standard field initialization would reset this flag after
-  // super() returns, breaking the duplicate-registration guard.
-  private declare _isEnabled: boolean;
-  private declare _listenersRegistered: boolean;
-  private _applyCustomLogRecordData?: (logRecord: LogRecord) => void;
-  private _includeRawAttribution: boolean;
+  private _listenersRegistered = false;
 
   constructor(config: WebVitalsInstrumentationConfig = {}) {
     super('@opentelemetry/browser-instrumentation/web-vitals', version, config);
-    this._applyCustomLogRecordData = config.applyCustomLogRecordData;
-    this._includeRawAttribution = config.includeRawAttribution ?? false;
-  }
-
-  protected override init() {
-    return [];
+    if (config.enabled === true) {
+      this.enable();
+    }
   }
 
   /**
-   * Enables the instrumentation and registers web-vitals listeners.
-   * Listeners are registered only once. If disabled, subsequent calls resume emission.
+   * Listeners are registered once per instance; because web-vitals can't
+   * unsubscribe, disable() leaves them in place and only pauses emission.
+   * A subsequent enable() resumes emission without re-registering. No-op on
+   * browsers without PerformanceObserver.
    */
   override enable(): void {
+    if (this._enabled) {
+      return;
+    }
     if (typeof PerformanceObserver === 'undefined') {
       this._diag.debug(
         'PerformanceObserver not supported, web vitals will not be collected',
       );
       return;
     }
-
-    this._isEnabled = true;
+    this._enabled = true;
 
     if (this._listenersRegistered) {
       this._diag.debug('Listeners already registered, resuming emission');
@@ -85,12 +78,11 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
     onTTFB((metric) => this._emitWebVital(metric));
   }
 
-  /**
-   * Disables the instrumentation, pausing log emission.
-   * Listeners remain active due to web-vitals library limitations.
-   */
   override disable(): void {
-    this._isEnabled = false;
+    if (!this._enabled) {
+      return;
+    }
+    this._enabled = false;
     this._diag.debug('Instrumentation disabled, pausing emission');
   }
 
@@ -118,7 +110,7 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
   }
 
   private _emitWebVital(metric: MetricWithAttribution): void {
-    if (!this._isEnabled) {
+    if (!this._enabled) {
       return;
     }
     const attributes: Attributes = {
@@ -137,15 +129,16 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
       eventName: WEB_VITAL_EVENT_NAME,
       severityNumber: SeverityNumber.INFO,
       attributes,
-      ...(this._includeRawAttribution
+      ...(this._config.includeRawAttribution === true
         ? { body: JSON.stringify(metric.attribution) }
         : {}),
       ...(timestamp !== undefined ? { timestamp } : {}),
     };
 
-    if (this._applyCustomLogRecordData) {
+    const applyCustomLogRecordData = this._config.applyCustomLogRecordData;
+    if (applyCustomLogRecordData) {
       safeExecuteInTheMiddle(
-        () => this._applyCustomLogRecordData?.(logRecord),
+        () => applyCustomLogRecordData(logRecord),
         (error) => {
           if (error) {
             this._diag.error('applyCustomLogRecordData hook failed', error);

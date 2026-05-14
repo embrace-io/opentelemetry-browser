@@ -5,7 +5,7 @@
 
 import { context } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import { InstrumentationBase } from '@opentelemetry/instrumentation';
+import { InstrumentationBase } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import { ATTR_CONSOLE_METHOD, CONSOLE_LOG_EVENT_NAME } from './semconv.ts';
 import type { ConsoleInstrumentationConfig, ConsoleMethod } from './types.ts';
@@ -50,15 +50,13 @@ function defaultMessageSerializer(args: unknown[]): string {
  * OpenTelemetry instrumentation that captures console calls and emits them as OpenTelemetry logs.
  */
 export class ConsoleInstrumentation extends InstrumentationBase<ConsoleInstrumentationConfig> {
-  private declare _isPatched: boolean;
-  private declare _active: boolean;
+  private _isPatched = false;
 
   constructor(config: ConsoleInstrumentationConfig = {}) {
     super('@opentelemetry/browser-instrumentation/console', version, config);
-  }
-
-  protected override init() {
-    return [];
+    if (config.enabled === true) {
+      this.enable();
+    }
   }
 
   private _getMessageSerializer(): (args: unknown[]) => string {
@@ -77,7 +75,7 @@ export class ConsoleInstrumentation extends InstrumentationBase<ConsoleInstrumen
     return function patchConsoleMethod(original: Console[ConsoleMethod]) {
       return function (this: Console, ...args: unknown[]) {
         if (
-          instrumentation._active &&
+          instrumentation._enabled &&
           instrumentation._getLogMethods().includes(method)
         ) {
           const logContext = context.active();
@@ -100,8 +98,16 @@ export class ConsoleInstrumentation extends InstrumentationBase<ConsoleInstrumen
     };
   }
 
+  /**
+   * Patches console methods once per instance. Subsequent disable()/enable()
+   * cycles only flip the enabled flag; wrappers stay installed (gated on
+   * `_enabled`) so callers that captured them keep working.
+   */
   override enable(): void {
-    this._active = true;
+    if (this._enabled) {
+      return;
+    }
+    this._enabled = true;
     if (this._isPatched) {
       return;
     }
@@ -114,6 +120,9 @@ export class ConsoleInstrumentation extends InstrumentationBase<ConsoleInstrumen
   }
 
   override disable(): void {
-    this._active = false;
+    if (!this._enabled) {
+      return;
+    }
+    this._enabled = false;
   }
 }

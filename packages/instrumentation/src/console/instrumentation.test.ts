@@ -42,7 +42,7 @@ describe('ConsoleInstrumentation', () => {
 
   beforeEach(() => {
     inMemoryExporter.reset();
-    instrumentation = new ConsoleInstrumentation();
+    instrumentation = new ConsoleInstrumentation({ enabled: true });
   });
 
   afterEach(() => {
@@ -255,13 +255,10 @@ describe('ConsoleInstrumentation', () => {
         originalLog.apply(console, args);
       };
 
-      instrumentation = new ConsoleInstrumentation();
-
       console.log('test');
 
       expect(called).toBe(true);
 
-      instrumentation.disable();
       console.log = originalLog;
     });
   });

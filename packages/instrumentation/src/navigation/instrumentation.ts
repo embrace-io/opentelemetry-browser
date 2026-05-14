@@ -5,10 +5,8 @@
 
 import type { LogRecord } from '@opentelemetry/api-logs';
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import {
-  InstrumentationBase,
-  safeExecuteInTheMiddle,
-} from '@opentelemetry/instrumentation';
+import { safeExecuteInTheMiddle } from '@opentelemetry/instrumentation';
+import { InstrumentationBase } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import {
   ATTR_BROWSER_NAVIGATION_HASH_CHANGE,
@@ -54,31 +52,27 @@ interface NavigationApi {
 }
 
 export class NavigationInstrumentation extends InstrumentationBase<NavigationInstrumentationConfig> {
-  // Use `declare` to prevent JS class field initializers from running after
-  // super(), which would reset values set by the enable() call that
-  // InstrumentationBase makes during its constructor.
-  private declare _isEnabled: boolean;
-  private declare _isHistoryPatched: boolean;
-  private declare _hasProcessedInitialLoad: boolean;
-  private declare _lastUrl: string;
-  private declare _onDOMContentLoaded?: () => void;
-  private declare _onPopState?: (event: PopStateEvent) => void;
-  private declare _onCurrentEntryChange?: (event: NavigationApiEvent) => void;
+  private _isHistoryPatched = false;
+  // Sticky across disable/enable: hard-navigation emits at most once per page lifecycle.
+  private _hasProcessedInitialLoad = false;
+  private _lastUrl: string;
+  private _onDOMContentLoaded?: () => void;
+  private _onPopState?: (event: PopStateEvent) => void;
+  private _onCurrentEntryChange?: (event: NavigationApiEvent) => void;
 
   constructor(config: NavigationInstrumentationConfig = {}) {
     super('@opentelemetry/browser-instrumentation/navigation', version, config);
     this._lastUrl = location.href;
-  }
-
-  protected override init() {
-    return [];
+    if (config.enabled === true) {
+      this.enable();
+    }
   }
 
   override enable(): void {
-    if (this._isEnabled) {
+    if (this._enabled) {
       return;
     }
-    this._isEnabled = true;
+    this._enabled = true;
 
     const navigationApi = this._getNavigationApi();
 
@@ -107,10 +101,10 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
   }
 
   override disable(): void {
-    if (!this._isEnabled) {
+    if (!this._enabled) {
       return;
     }
-    this._isEnabled = false;
+    this._enabled = false;
 
     if (this._onDOMContentLoaded) {
       document.removeEventListener(
@@ -131,8 +125,6 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
       );
       this._onCurrentEntryChange = undefined;
     }
-    // Reset the initial-load flag so it can be processed again if re-enabled.
-    this._hasProcessedInitialLoad = false;
   }
 
   private _getNavigationApi(): NavigationApi | undefined {
@@ -230,7 +222,7 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
         this: History,
         ...args: Parameters<History['pushState' | 'replaceState']>
       ) {
-        if (!plugin._isEnabled) {
+        if (!plugin._enabled) {
           return original.apply(this, args);
         }
         const result = original.apply(this, args);

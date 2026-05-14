@@ -5,7 +5,7 @@
 
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { isUrlIgnored } from '@opentelemetry/core';
-import { InstrumentationBase } from '@opentelemetry/instrumentation';
+import { InstrumentationBase } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import type { IdleCallbackHandle } from './idle-callback-shim.ts';
 import {
@@ -59,13 +59,8 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
   private _observer?: PerformanceObserver;
   private _pendingEntries: PerformanceResourceTiming[] = [];
   private _idleHandle?: IdleCallbackHandle;
-
-  // Use `declare` to prevent JS class field initializers from running after
-  // super(), which would reset values set by the enable() call that
-  // InstrumentationBase makes during its constructor.
-  private declare _isEnabled: boolean;
-  private declare _loadHandler: (() => void) | undefined;
-  private declare _visibilityChangeHandler: (() => void) | undefined;
+  private _loadHandler?: () => void;
+  private _visibilityChangeHandler?: () => void;
 
   constructor(config: ResourceTimingInstrumentationConfig = {}) {
     super(
@@ -73,25 +68,22 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
       version,
       config,
     );
-  }
-
-  protected override init() {
-    return [];
+    if (config.enabled === true) {
+      this.enable();
+    }
   }
 
   override enable(): void {
-    if (this._isEnabled) {
+    if (this._enabled) {
       return;
     }
-
     if (!('PerformanceObserver' in window)) {
       this._diag.debug(
         'PerformanceObserver is not supported, resource timings will not be collected',
       );
       return;
     }
-
-    this._isEnabled = true;
+    this._enabled = true;
 
     if (document.readyState === 'complete') {
       this._setupObserver();
@@ -112,7 +104,10 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
   }
 
   override disable(): void {
-    this._isEnabled = false;
+    if (!this._enabled) {
+      return;
+    }
+    this._enabled = false;
     this._flush();
     this._observer?.disconnect();
     this._observer = undefined;
@@ -130,12 +125,12 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
   }
 
   private _setupObserver(): void {
-    if (!this._isEnabled) {
+    if (!this._enabled) {
       return;
     }
 
     const observer = new PerformanceObserver((list) => {
-      if (!this._isEnabled) {
+      if (!this._enabled) {
         return;
       }
 
@@ -203,7 +198,7 @@ export class ResourceTimingInstrumentation extends InstrumentationBase<ResourceT
 
   private _processChunk(deadline: IdleDeadline): void {
     this._idleHandle = undefined;
-    if (!this._isEnabled || this._pendingEntries.length === 0) {
+    if (!this._enabled || this._pendingEntries.length === 0) {
       return;
     }
 

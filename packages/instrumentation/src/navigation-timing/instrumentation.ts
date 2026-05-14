@@ -4,7 +4,7 @@
  */
 
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import { InstrumentationBase } from '@opentelemetry/instrumentation';
+import { InstrumentationBase } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import {
   ATTR_NAVIGATION_CONNECT_END,
@@ -46,13 +46,12 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
   private _completeDelayTimeoutId?: number;
   private _retryCount = 0;
   private _didEmit = false;
-
-  // Use `declare` to prevent JS class field initializers from running after
-  // super(), which would reset values set by the enable() call that
-  // InstrumentationBase makes during its constructor.
-  private declare _isEnabled: boolean;
-  private declare _onLoad: () => void;
-  private declare _onPageHide: () => void;
+  private readonly _onLoad = (): void => {
+    this._tryEmitOrSchedule();
+  };
+  private readonly _onPageHide = (): void => {
+    this._handleUnload();
+  };
 
   constructor(config: NavigationTimingInstrumentationConfig = {}) {
     super(
@@ -60,19 +59,16 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
       version,
       config,
     );
-  }
-
-  protected override init() {
-    return [];
+    if (config.enabled === true) {
+      this.enable();
+    }
   }
 
   override enable(): void {
-    if (this._isEnabled) {
+    if (this._enabled) {
       return;
     }
-    this._isEnabled = true;
-    this._onLoad = () => this._tryEmitOrSchedule();
-    this._onPageHide = () => this._handleUnload();
+    this._enabled = true;
 
     // Try emitting immediately (e.g. when enabled after load),
     // otherwise schedule for `load` or fall back to unload.
@@ -85,7 +81,10 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
   }
 
   override disable(): void {
-    this._isEnabled = false;
+    if (!this._enabled) {
+      return;
+    }
+    this._enabled = false;
     this._unsubscribeAll();
     this._lastEntry = undefined;
     this._didEmit = false;
@@ -241,11 +240,7 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
       this._completeDelayTimeoutId = undefined;
     }
 
-    if (this._onLoad) {
-      window.removeEventListener('load', this._onLoad);
-    }
-    if (this._onPageHide) {
-      window.removeEventListener('pagehide', this._onPageHide);
-    }
+    window.removeEventListener('load', this._onLoad);
+    window.removeEventListener('pagehide', this._onPageHide);
   }
 }

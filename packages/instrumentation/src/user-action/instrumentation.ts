@@ -4,8 +4,7 @@
  */
 
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import { InstrumentationBase } from '@opentelemetry/instrumentation';
-import { getElementCSSSelector } from '#utils';
+import { getElementCSSSelector, InstrumentationBase } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import {
   ATTR_CSS_SELECTOR,
@@ -29,7 +28,7 @@ const OTEL_ELEMENT_ATTRIBUTE_PREFIX = 'data-otel-';
  * This class automatically instruments different User Actions within the browser.
  */
 export class UserActionInstrumentation extends InstrumentationBase<UserActionInstrumentationConfig> {
-  private declare _onClickHandler?: (event: MouseEvent) => void;
+  private _onClickHandler?: (event: MouseEvent) => void;
 
   constructor(config: UserActionInstrumentationConfig = {}) {
     super(
@@ -37,10 +36,9 @@ export class UserActionInstrumentation extends InstrumentationBase<UserActionIns
       version,
       config,
     );
-  }
-
-  protected override init() {
-    return [];
+    if (config.enabled === true) {
+      this.enable();
+    }
   }
 
   private _getMouseButtonFromMouseEvent(event: MouseEvent): MouseButton {
@@ -97,6 +95,11 @@ export class UserActionInstrumentation extends InstrumentationBase<UserActionIns
   }
 
   override enable(): void {
+    if (this._enabled) {
+      return;
+    }
+    this._enabled = true;
+
     const autoCapturedActions =
       this._config.autoCapturedActions ?? DEFAULT_AUTO_CAPTURED_ACTIONS;
     if (!this._onClickHandler) {
@@ -109,6 +112,10 @@ export class UserActionInstrumentation extends InstrumentationBase<UserActionIns
   }
 
   override disable(): void {
+    if (!this._enabled) {
+      return;
+    }
+    this._enabled = false;
     if (this._onClickHandler) {
       document.removeEventListener('click', this._onClickHandler, true);
     }

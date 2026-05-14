@@ -125,7 +125,7 @@ describe('NavigationTimingInstrumentation', () => {
     expect(logs[0]?.attributes[ATTR_NAVIGATION_LOAD_EVENT_END]).toBe(456);
   });
 
-  it('should emit on construction when enabled by default and page is still loading', () => {
+  it('should emit on construction when enabled: true and page is still loading', () => {
     setReadyState('loading');
 
     let entry = {
@@ -139,7 +139,7 @@ describe('NavigationTimingInstrumentation', () => {
 
     getEntriesByTypeSpy.mockReturnValueOnce([entry]);
 
-    const inst = new NavigationTimingInstrumentation();
+    const inst = new NavigationTimingInstrumentation({ enabled: true });
     expect(getNavigationTimingLogs().length).toBe(0);
 
     entry = { ...entry, loadEventEnd: 456 };
@@ -150,6 +150,27 @@ describe('NavigationTimingInstrumentation', () => {
     const logs = getNavigationTimingLogs();
     expect(logs.length).toBe(1);
     expect(logs[0]?.attributes[ATTR_NAVIGATION_LOAD_EVENT_END]).toBe(456);
+
+    inst.disable();
+  });
+
+  it('should not emit on construction without explicit enabled: true', () => {
+    setReadyState('complete');
+
+    const entry = {
+      name: 'https://example.test/',
+      entryType: 'navigation',
+      startTime: 0,
+      duration: 1,
+      type: 'navigate',
+      loadEventEnd: 999,
+    };
+
+    getEntriesByTypeSpy.mockReturnValue([entry]);
+
+    const inst = new NavigationTimingInstrumentation();
+    expect(inst.isEnabled()).toBe(false);
+    expect(getNavigationTimingLogs().length).toBe(0);
 
     inst.disable();
   });

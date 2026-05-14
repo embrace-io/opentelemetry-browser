@@ -39,6 +39,7 @@ describe('WebVitalsInstrumentation', () => {
     testContainer = document.createElement('div');
     testContainer.id = 'test-container';
     document.body.appendChild(testContainer);
+    instrumentation = new WebVitalsInstrumentation();
   });
 
   afterEach(() => {
@@ -106,7 +107,7 @@ describe('WebVitalsInstrumentation', () => {
 
   describe('INP metric', () => {
     it('should emit INP after user interaction', async () => {
-      instrumentation = new WebVitalsInstrumentation();
+      instrumentation.enable();
       createButton('Click me');
 
       await triggerINP('Click me');
@@ -125,7 +126,7 @@ describe('WebVitalsInstrumentation', () => {
 
   describe('CLS metric', () => {
     it('should emit CLS after layout shift', async () => {
-      instrumentation = new WebVitalsInstrumentation();
+      instrumentation.enable();
 
       const shifter = document.createElement('div');
       shifter.id = 'shifter';
@@ -159,8 +160,7 @@ describe('WebVitalsInstrumentation', () => {
 
   describe('enable/disable', () => {
     it('should not emit metrics when disabled', async () => {
-      instrumentation = new WebVitalsInstrumentation();
-      instrumentation.disable();
+      expect(instrumentation.isEnabled()).toBe(false);
 
       const button = document.createElement('button');
       button.textContent = 'Disabled test';
@@ -177,7 +177,7 @@ describe('WebVitalsInstrumentation', () => {
     });
 
     it('should resume emitting after re-enable', async () => {
-      instrumentation = new WebVitalsInstrumentation();
+      instrumentation.enable();
       instrumentation.disable();
       instrumentation.enable();
 
@@ -191,7 +191,8 @@ describe('WebVitalsInstrumentation', () => {
 
   describe('includeRawAttribution', () => {
     it('should include attribution as body when enabled', async () => {
-      instrumentation = new WebVitalsInstrumentation({
+      instrumentation.setConfig({
+        enabled: true,
         includeRawAttribution: true,
       });
 
@@ -214,7 +215,8 @@ describe('WebVitalsInstrumentation', () => {
         throw new Error('Hook error');
       });
 
-      instrumentation = new WebVitalsInstrumentation({
+      instrumentation.setConfig({
+        enabled: true,
         applyCustomLogRecordData: errorHook,
       });
 
@@ -233,7 +235,8 @@ describe('WebVitalsInstrumentation', () => {
         logRecord.attributes['custom.page'] = 'test-page';
       });
 
-      instrumentation = new WebVitalsInstrumentation({
+      instrumentation.setConfig({
+        enabled: true,
         applyCustomLogRecordData: customHook,
       });
 
