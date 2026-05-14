@@ -207,10 +207,56 @@ describe('WebVitalsInstrumentation', () => {
       );
       expect(inpLogs).toHaveLength(1);
     });
+
+    it('should register the five web-vitals listeners only once across multiple enable cycles', () => {
+      // The INP assertion above covers the observable consequence for one
+      // metric. This assertion covers the registration-guard contract for all
+      // five (CLS, INP, LCP, FCP, TTFB) at the same time by counting calls to
+      // the protected `_diag` registration log. Across multiple enable cycles
+      // the "Registering listeners" debug log must appear exactly once; every
+      // subsequent enable() must take the "already registered" branch.
+      const debugLog = vi.fn();
+      const fakeLogger = {
+        verbose: () => {},
+        debug: debugLog,
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+      };
+      const localInstrumentation = new WebVitalsInstrumentation();
+      (localInstrumentation as unknown as { _diag: typeof fakeLogger })._diag =
+        fakeLogger;
+
+      localInstrumentation.enable();
+      localInstrumentation.disable();
+      localInstrumentation.enable();
+      localInstrumentation.disable();
+      localInstrumentation.enable();
+
+      const registrationLogs = debugLog.mock.calls.filter((call) => {
+        const message = call[0];
+        return (
+          typeof message === 'string' &&
+          message.includes('Registering listeners')
+        );
+      });
+      expect(registrationLogs).toHaveLength(1);
+
+      const resumeLogs = debugLog.mock.calls.filter((call) => {
+        const message = call[0];
+        return (
+          typeof message === 'string' &&
+          message.includes('Listeners already registered')
+        );
+      });
+      expect(resumeLogs).toHaveLength(2);
+
+      localInstrumentation.disable();
+    });
   });
 
   describe('includeRawAttribution', () => {
-    it('should include attribution as body when enabled', async () => {
+    it('should include attribution as body when includeRawAttribution is true', async () => {
       instrumentation.setConfig({
         enabled: true,
         includeRawAttribution: true,

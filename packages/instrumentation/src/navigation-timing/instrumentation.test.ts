@@ -473,7 +473,10 @@ describe('NavigationTimingInstrumentation', () => {
     expect(logs[0]?.attributes[ATTR_NAVIGATION_DECODED_BODY_SIZE]).toBe(2000);
   });
 
-  it('should work correctly when disable() is called then immediately enable() again', () => {
+  it('should not re-emit after a disable/enable cycle once the navigation entry has been emitted', () => {
+    // A page only has one PerformanceNavigationTiming entry, so a re-emit
+    // after disable/enable would duplicate the same event. The contract is
+    // once-per-page-lifecycle, matching the hard navigation event.
     setReadyState('complete');
 
     const entry = {
@@ -496,8 +499,47 @@ describe('NavigationTimingInstrumentation', () => {
     instrumentation.enable();
 
     const logs = getNavigationTimingLogs();
-    expect(logs.length).toBe(1);
-    expect(logs[0]?.attributes[ATTR_NAVIGATION_LOAD_EVENT_END]).toBe(200);
+    expect(logs.length).toBe(0);
+  });
+
+  it('should reset retry count on disable so a second lifecycle can retry from zero', () => {
+    // Sticky `_didEmit` prevents re-emit, but if a first cycle exhausted
+    // retries without emitting (no entry available), a subsequent disable
+    // and enable must reset `_retryCount` so the next cycle gets a fresh
+    // retry budget.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    setReadyState('complete');
+
+    // First cycle: no entries, exhaust retries, no emit, _didEmit stays false.
+    getEntriesByTypeSpy.mockReturnValue([]);
+    instrumentation.enable();
+    for (let i = 0; i < 6; i++) {
+      vi.runOnlyPendingTimers();
+    }
+    expect(getNavigationTimingLogs().length).toBe(0);
+
+    instrumentation.disable();
+
+    // Second cycle: entry becomes available. If _retryCount were not reset,
+    // the next enable() would immediately exhaust on cycle 1 and emit the
+    // incomplete entry; with the reset, retries restart from zero.
+    const completeEntry = {
+      name: 'https://example.test/',
+      entryType: 'navigation',
+      startTime: 0,
+      duration: 1,
+      type: 'navigate',
+      loadEventEnd: 999,
+    };
+    getEntriesByTypeSpy.mockReturnValue([completeEntry]);
+    instrumentation.enable();
+
+    expect(getNavigationTimingLogs().length).toBe(1);
+    expect(
+      getNavigationTimingLogs()[0]?.attributes[ATTR_NAVIGATION_LOAD_EVENT_END],
+    ).toBe(999);
+
+    vi.useRealTimers();
   });
 
   it('should re-subscribe pagehide listener after disable and enable', () => {

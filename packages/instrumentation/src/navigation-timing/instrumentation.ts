@@ -45,6 +45,9 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
   private _lastEntry?: PerformanceNavigationTiming;
   private _completeDelayTimeoutId?: number;
   private _retryCount = 0;
+  // Sticky across disable/enable: a page only has one PerformanceNavigationTiming
+  // entry, so re-emitting after a disable/enable cycle would duplicate the same
+  // event. Mirrors the once-per-lifecycle contract used for hard navigation.
   private _didEmit = false;
   private readonly _onLoad = (): void => {
     this._tryEmitOrSchedule();
@@ -78,7 +81,6 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
   protected _onDisable(): void {
     this._unsubscribeAll();
     this._lastEntry = undefined;
-    this._didEmit = false;
     this._retryCount = 0;
   }
 
@@ -231,7 +233,15 @@ export class NavigationTimingInstrumentation extends InstrumentationBase<Navigat
       this._completeDelayTimeoutId = undefined;
     }
 
-    window.removeEventListener('load', this._onLoad);
-    window.removeEventListener('pagehide', this._onPageHide);
+    // Class-field arrow refs make these provably non-null at the TS level,
+    // but the runtime guards stay so a hypothetical call before the fields
+    // are initialized (e.g. from a future hook order change) cannot throw
+    // an opaque "removeEventListener is not a function" inside teardown.
+    if (this._onLoad) {
+      window.removeEventListener('load', this._onLoad);
+    }
+    if (this._onPageHide) {
+      window.removeEventListener('pagehide', this._onPageHide);
+    }
   }
 }

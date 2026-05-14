@@ -115,8 +115,5 @@ export class ConsoleInstrumentation extends InstrumentationBase<ConsoleInstrumen
     }
   }
 
-  protected _onDisable(): void {
-    // Wrappers remain installed and gate on `_enabled` instead, so there is
-    // nothing to undo here.
-  }
+  protected _onDisable(): void {}
 }

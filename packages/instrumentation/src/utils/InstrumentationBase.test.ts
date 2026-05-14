@@ -168,6 +168,20 @@ describe('InstrumentationBase', () => {
       expect(inst.isEnabled()).toBe(false);
       expect(inst.enableCount).toBe(0);
     });
+
+    it('does not consult _canEnable when disabling', () => {
+      const inst = new VetoableInstrumentation();
+      inst.allowEnable = true;
+      inst.enable();
+      expect(inst.isEnabled()).toBe(true);
+
+      // Flip the veto to false and disable; teardown must run regardless.
+      inst.allowEnable = false;
+      inst.disable();
+
+      expect(inst.isEnabled()).toBe(false);
+      expect(inst.disableCount).toBe(1);
+    });
   });
 
   describe('idempotent enable() / disable()', () => {
@@ -254,20 +268,49 @@ describe('InstrumentationBase', () => {
       expect(inst.enableCount).toBe(1);
       expect(inst.disableCount).toBe(0);
     });
+
+    it('setConfig omitting enabled on a disabled instance keeps it disabled', () => {
+      const inst = new TestInstrumentation();
+      expect(inst.isEnabled()).toBe(false);
+
+      inst.setConfig({ marker: 'still-off' });
+
+      expect(inst.isEnabled()).toBe(false);
+      expect(inst.enableCount).toBe(0);
+      expect(inst.disableCount).toBe(0);
+      expect(inst.getConfig().marker).toBe('still-off');
+    });
   });
 
-  describe('setConfig error handling', () => {
+  describe('getConfig snapshot', () => {
+    it('returns a frozen snapshot that cannot mutate the live config', () => {
+      const inst = new TestInstrumentation({ enabled: true, marker: 'init' });
+      const snapshot = inst.getConfig();
+
+      expect(Object.isFrozen(snapshot)).toBe(true);
+      expect(() => {
+        (snapshot as { enabled: boolean }).enabled = false;
+      }).toThrow();
+      expect(inst.isEnabled()).toBe(true);
+    });
+  });
+
+  describe('lifecycle error handling', () => {
     let errorMock: ReturnType<
+      typeof vi.fn<(message: string, ...args: unknown[]) => void>
+    >;
+    let warnMock: ReturnType<
       typeof vi.fn<(message: string, ...args: unknown[]) => void>
     >;
 
     beforeEach(() => {
       errorMock = vi.fn<(message: string, ...args: unknown[]) => void>();
+      warnMock = vi.fn<(message: string, ...args: unknown[]) => void>();
       const fakeLogger: DiagLogger = {
         verbose: () => {},
         debug: () => {},
         info: () => {},
-        warn: () => {},
+        warn: warnMock,
         error: errorMock,
       };
       diag.setLogger(fakeLogger, DiagLogLevel.ALL);
@@ -277,6 +320,19 @@ describe('InstrumentationBase', () => {
       diag.disable();
     });
 
+    const sawTransitionLog = (
+      mock: typeof errorMock,
+      direction: 'false -> true' | 'true -> false',
+    ) =>
+      mock.mock.calls.some((call) => {
+        const message = call[1];
+        return (
+          typeof message === 'string' &&
+          message.includes('lifecycle transition') &&
+          message.includes(direction)
+        );
+      });
+
     it('logs and rethrows when enable() throws during setConfig transition', () => {
       const inst = new ThrowingInstrumentation();
       inst.throwOn = 'enable';
@@ -285,17 +341,7 @@ describe('InstrumentationBase', () => {
         inst.setConfig({ enabled: true, marker: 'turning-on' }),
       ).toThrow('enable boom');
 
-      // componentLogger prepends the instrumentation name; the message we
-      // emitted lives at call[1].
-      const sawTransitionLog = errorMock.mock.calls.some((call) => {
-        const message = call[1];
-        return (
-          typeof message === 'string' &&
-          message.includes('setConfig transition') &&
-          message.includes('false -> true')
-        );
-      });
-      expect(sawTransitionLog).toBe(true);
+      expect(sawTransitionLog(errorMock, 'false -> true')).toBe(true);
     });
 
     it('logs and rethrows when disable() throws during setConfig transition', () => {
@@ -306,15 +352,53 @@ describe('InstrumentationBase', () => {
         inst.setConfig({ enabled: false, marker: 'turning-off' }),
       ).toThrow('disable boom');
 
-      const sawTransitionLog = errorMock.mock.calls.some((call) => {
-        const message = call[1];
-        return (
-          typeof message === 'string' &&
-          message.includes('setConfig transition') &&
-          message.includes('true -> false')
-        );
-      });
-      expect(sawTransitionLog).toBe(true);
+      expect(sawTransitionLog(errorMock, 'true -> false')).toBe(true);
+    });
+
+    it('logs and rethrows when enable() is called directly and the hook throws', () => {
+      const inst = new ThrowingInstrumentation();
+      inst.throwOn = 'enable';
+
+      expect(() => inst.enable()).toThrow('enable boom');
+
+      expect(sawTransitionLog(errorMock, 'false -> true')).toBe(true);
+    });
+
+    it('logs and rethrows when disable() is called directly and the hook throws', () => {
+      const inst = new ThrowingInstrumentation({ enabled: true });
+      inst.throwOn = 'disable';
+
+      expect(() => inst.disable()).toThrow('disable boom');
+
+      expect(sawTransitionLog(errorMock, 'true -> false')).toBe(true);
+    });
+
+    it('rolls _config.enabled back to false when _onEnable throws', () => {
+      const inst = new ThrowingInstrumentation();
+      inst.throwOn = 'enable';
+
+      expect(() => inst.enable()).toThrow('enable boom');
+      expect(inst.isEnabled()).toBe(false);
+    });
+
+    it('rolls _config.enabled back to true when _onDisable throws', () => {
+      const inst = new ThrowingInstrumentation({ enabled: true });
+      inst.throwOn = 'disable';
+
+      expect(() => inst.disable()).toThrow('disable boom');
+      expect(inst.isEnabled()).toBe(true);
+    });
+
+    it('allows a clean retry of enable() after the hook stops throwing', () => {
+      const inst = new ThrowingInstrumentation();
+      inst.throwOn = 'enable';
+
+      expect(() => inst.enable()).toThrow('enable boom');
+      expect(inst.isEnabled()).toBe(false);
+
+      inst.throwOn = 'none';
+      inst.enable();
+      expect(inst.isEnabled()).toBe(true);
     });
 
     it('does not log when no transition occurs and subclass would throw', () => {
@@ -325,6 +409,33 @@ describe('InstrumentationBase', () => {
         inst.setConfig({ enabled: true, marker: 'no-transition' }),
       ).not.toThrow();
       expect(errorMock).not.toHaveBeenCalled();
+    });
+
+    it('warns when setConfig requests enable but _canEnable() vetoes', () => {
+      const inst = new VetoableInstrumentation();
+      inst.allowEnable = false;
+
+      inst.setConfig({ enabled: true });
+
+      expect(inst.isEnabled()).toBe(false);
+      const sawWarn = warnMock.mock.calls.some((call) => {
+        const message = call[1];
+        return (
+          typeof message === 'string' &&
+          message.includes('setConfig requested enable') &&
+          message.includes('_canEnable() vetoed')
+        );
+      });
+      expect(sawWarn).toBe(true);
+    });
+
+    it('does not warn when setConfig keeps the instance disabled without requesting enable', () => {
+      const inst = new VetoableInstrumentation();
+      inst.allowEnable = false;
+
+      inst.setConfig({ marker: 'disabled-untouched' });
+
+      expect(warnMock).not.toHaveBeenCalled();
     });
   });
 });

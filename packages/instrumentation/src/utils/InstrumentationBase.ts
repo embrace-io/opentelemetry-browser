@@ -25,10 +25,16 @@ import { InstrumentationBase as CoreInstrumentationBase } from '@opentelemetry/i
  *    to veto a transition, e.g. for unsupported browsers). The base owns the
  *    idempotency guard and the `_config.enabled` write, so the invariant
  *    "after enable() returns isEnabled() is true" cannot drift per subclass.
+ *  - Wrap the hooks in a shared try/catch: if `_onEnable()` or `_onDisable()`
+ *    throws, the base rolls `_config.enabled` back to its pre-call value (so
+ *    `isEnabled()` remains accurate), logs a diagnostic, and rethrows. Side
+ *    effects installed before the throw may still be live, so the instance
+ *    should be reset or discarded by the caller.
  *  - Override `setConfig` so callers can flip state and update other config
  *    fields atomically. Omitting `enabled` from the new config preserves the
  *    current state (upstream's setConfig would otherwise default it to true
- *    and surprise-enable).
+ *    and surprise-enable). When `enabled: true` is requested but `_canEnable()`
+ *    vetoes, a warn-level diag log surfaces the silent veto.
  *
  * `enable()` and `disable()` are intentionally not `abstract` and should not
  * be overridden by subclasses. The template-method hooks below are the
@@ -57,6 +63,17 @@ export abstract class InstrumentationBase<
   }
 
   /**
+   * Returns a frozen snapshot of the current config. External callers cannot
+   * mutate `_config.enabled` (or any other field) through the returned object,
+   * which would otherwise let them silently invalidate the lifecycle invariant.
+   * Subclasses inside this package read `this._config` directly when they need
+   * the live reference.
+   */
+  override getConfig(): Readonly<ConfigType> {
+    return Object.freeze({ ...this._config });
+  }
+
+  /**
    * Final. Do not override. Subclasses implement `_onEnable()` (and optionally
    * `_canEnable()`) for setup logic.
    */
@@ -67,8 +84,7 @@ export abstract class InstrumentationBase<
     if (!this._canEnable()) {
       return;
     }
-    this._config = { ...this._config, enabled: true };
-    this._onEnable();
+    this._runTransition(true);
   }
 
   /**
@@ -78,8 +94,7 @@ export abstract class InstrumentationBase<
     if (!this._enabled) {
       return;
     }
-    this._config = { ...this._config, enabled: false };
-    this._onDisable();
+    this._runTransition(false);
   }
 
   override setConfig(config: ConfigType): void {
@@ -92,22 +107,43 @@ export abstract class InstrumentationBase<
     // at the pre-call value and the other fields take effect immediately.
     this._config = { ...config, enabled: wasEnabled };
 
-    // If the subclass throws partway through _onEnable/_onDisable, the
-    // instance may be left in an inconsistent state (handlers half-installed,
-    // _enabled out of sync with actual side effects). Log a clear diagnostic
-    // before rethrowing so callers can correlate the partial transition with
-    // the surfacing error.
+    if (targetEnabled && !wasEnabled) {
+      this.enable();
+      // _canEnable() may veto the transition; surface that explicitly here
+      // because a caller who passed `enabled: true` will otherwise see a
+      // clean return and have no idea the instance stayed disabled.
+      if (!this._enabled) {
+        this._diag.warn(
+          'setConfig requested enable but _canEnable() vetoed; instance remains disabled',
+        );
+      }
+    } else if (!targetEnabled && wasEnabled) {
+      this.disable();
+    }
+  }
+
+  /**
+   * Runs the requested transition with a try/catch that logs a diagnostic
+   * before rethrowing. On throw, `_config.enabled` is rolled back to the
+   * pre-call state so `isEnabled()` remains accurate; the subclass-installed
+   * side effects may still be partially applied, so the instance should be
+   * treated as suspect and either reset or discarded by the caller.
+   */
+  private _runTransition(target: boolean): void {
+    const previous = !target;
+    this._config = { ...this._config, enabled: target };
     try {
-      if (targetEnabled && !wasEnabled) {
-        this.enable();
-      } else if (!targetEnabled && wasEnabled) {
-        this.disable();
+      if (target) {
+        this._onEnable();
+      } else {
+        this._onDisable();
       }
     } catch (err) {
+      this._config = { ...this._config, enabled: previous };
       this._diag.error(
-        `setConfig transition (enabled: ${String(wasEnabled)} -> ${String(
-          targetEnabled,
-        )}) threw. instance may be in a partially-applied state`,
+        `lifecycle transition (enabled: ${String(previous)} -> ${String(
+          target,
+        )}) threw. side effects may be partially applied`,
         err,
       );
       throw err;

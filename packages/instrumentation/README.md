@@ -74,6 +74,8 @@ webVitals.enable();
 
 Use `instrumentation.isEnabled()` to read the current state. `setConfig({ enabled, ... })` updates other config fields and transitions the lifecycle in a single call; omitting `enabled` preserves the current state.
 
+Some instrumentations check for browser capabilities before enabling. For example, `WebVitalsInstrumentation` and `ResourceTimingInstrumentation` require `PerformanceObserver`. If a prerequisite is missing, `enable()` is a no-op and `isEnabled()` stays `false`. `setConfig({ enabled: true })` logs a warning in this case so the veto is not silent. Always treat `isEnabled()` as the source of truth, not the value you passed in.
+
 ---
 
 ### Navigation

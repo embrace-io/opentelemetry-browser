@@ -71,10 +71,13 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
   protected _onEnable(): void {
     const navigationApi = this._getNavigationApi();
 
-    // Only patch history API if Navigation API is not being used.
+    // Only patch history API if Navigation API is not being used. Mark patched
+    // before wrapping so a throw partway through (e.g. pushState wrap fails
+    // after replaceState wrap succeeded) cannot cause double-wrapping on a
+    // subsequent enable() retry.
     if (!navigationApi && !this._isHistoryPatched) {
-      this._patchHistoryApi();
       this._isHistoryPatched = true;
+      this._patchHistoryApi();
     }
 
     this._waitForPageLoad();
