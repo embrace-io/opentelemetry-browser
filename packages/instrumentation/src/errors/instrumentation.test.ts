@@ -36,10 +36,13 @@ class ValidationError extends Error {
 // We dispatch a cancelable plain Event (the instrumentation only reads
 // `event.error`) and call preventDefault from a capture-phase listener to
 // suppress the default reporting behavior.
-const dispatchErrorEvent = (error?: Error | string) => {
+const dispatchErrorEvent = (error?: Error | string, message?: string) => {
   const event = new Event('error', { cancelable: true });
   if (error !== undefined) {
     Object.defineProperty(event, 'error', { value: error });
+  }
+  if (message !== undefined) {
+    Object.defineProperty(event, 'message', { value: message });
   }
   const suppress = (e: Event) => e.preventDefault();
   window.addEventListener('error', suppress, { capture: true });
@@ -167,10 +170,38 @@ describe('ErrorsInstrumentation', () => {
       expect(logs[0]?.attributes[ATTR_EXCEPTION_STACKTRACE]).toBeUndefined();
     });
 
-    it('should not emit when the error is missing', () => {
+    it('should not emit when both error and message are missing', () => {
       dispatchErrorEvent();
 
       expect(getErrorLogs()).toHaveLength(0);
+    });
+
+    it('should emit using event.message when event.error is missing', () => {
+      // Cross-origin scripts deliver "Script error." with event.error null.
+      dispatchErrorEvent(undefined, 'Script error.');
+
+      const logs = getErrorLogs();
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.eventName).toBe(EXCEPTION_EVENT_NAME);
+      expect(logs[0]?.attributes[ATTR_EXCEPTION_MESSAGE]).toBe('Script error.');
+      expect(logs[0]?.attributes[ATTR_EXCEPTION_TYPE]).toBeUndefined();
+      expect(logs[0]?.attributes[ATTR_EXCEPTION_STACKTRACE]).toBeUndefined();
+    });
+
+    it('should not emit when event.message is an empty string', () => {
+      dispatchErrorEvent(undefined, '');
+
+      expect(getErrorLogs()).toHaveLength(0);
+    });
+
+    it('should prefer event.error over event.message when both are present', () => {
+      const error = new ValidationError('Real error');
+      dispatchErrorEvent(error, 'Script error.');
+
+      const logs = getErrorLogs();
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.attributes[ATTR_EXCEPTION_MESSAGE]).toBe('Real error');
+      expect(logs[0]?.attributes[ATTR_EXCEPTION_TYPE]).toBe('ValidationError');
     });
   });
 
