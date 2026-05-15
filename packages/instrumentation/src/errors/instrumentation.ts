@@ -78,7 +78,7 @@ export class ErrorsInstrumentation extends InstrumentationBase<ErrorsInstrumenta
         event.message.length > 0
       ) {
         const customAttributes = this._applyCustomAttributes(event.message);
-        this.logger.emit({
+        this._emit({
           eventName: EXCEPTION_EVENT_NAME,
           severityNumber: SeverityNumber.ERROR,
           attributes: {
@@ -112,13 +112,27 @@ export class ErrorsInstrumentation extends InstrumentationBase<ErrorsInstrumenta
 
     const customAttributes = this._applyCustomAttributes(error);
 
-    const logRecord: LogRecord = {
+    this._emit({
       eventName: EXCEPTION_EVENT_NAME,
       severityNumber: SeverityNumber.ERROR,
       attributes: { ...errorAttributes, ...customAttributes },
-    };
+    });
+  }
 
-    this.logger.emit(logRecord);
+  // Guard emit so a throwing LogRecordProcessor cannot escape the global
+  // `error`/`unhandledrejection` listener and re-enter this handler.
+  private _emit(logRecord: LogRecord): void {
+    safeExecuteInTheMiddle(
+      () => {
+        this.logger.emit(logRecord);
+      },
+      (err) => {
+        if (err) {
+          this._diag.error('failed to emit exception log', err);
+        }
+      },
+      true,
+    );
   }
 
   private _applyCustomAttributes(error: Error | string): Attributes {
