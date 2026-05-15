@@ -86,7 +86,16 @@ export class ErrorsInstrumentation extends InstrumentationBase<ErrorsInstrumenta
             ...customAttributes,
           },
         });
+        return;
       }
+      // Emit a diag debug message so the drop is observable. Anything that
+      // lands here had no usable signal (ErrorEvent with no error and no
+      // message, or PromiseRejectionEvent rejected with null/undefined).
+      this._diag.debug(
+        'reason' in event
+          ? 'ignored unhandledrejection event with no reason'
+          : 'ignored error event with no error and no message',
+      );
       return;
     }
 
