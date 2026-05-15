@@ -312,6 +312,42 @@ describe('ErrorsInstrumentation', () => {
       expect(logs[0]?.attributes[ATTR_EXCEPTION_MESSAGE]).toBe('overridden');
     });
 
+    it('should contain logger.emit failures to prevent an error-event feedback loop', () => {
+      // If logger.emit throws unguarded, the listener exception escapes
+      // dispatchEvent. In real browsers, the "report the exception"
+      // algorithm then fires another 'error' event on window, re-entering
+      // this listener and looping until the page crashes. The
+      // safeExecuteInTheMiddle guard contains the throw and routes it to
+      // diag.error instead, breaking the cycle.
+      instrumentation = new ErrorsInstrumentation({ enabled: false });
+      instrumentation.enable();
+
+      type Diag = { error: (...args: unknown[]) => void };
+      type Logger = { emit: (record: unknown) => void };
+      const internal = instrumentation as unknown as {
+        _diag: Diag;
+        logger: Logger;
+      };
+      const diagSpy = vi.spyOn(internal._diag, 'error');
+      const emitSpy = vi
+        .spyOn(internal.logger, 'emit')
+        .mockImplementation(() => {
+          throw new Error('processor exploded');
+        });
+
+      try {
+        dispatchErrorEvent(new ValidationError('original'));
+
+        expect(diagSpy).toHaveBeenCalledWith(
+          'failed to emit exception log',
+          expect.any(Error),
+        );
+      } finally {
+        emitSpy.mockRestore();
+        diagSpy.mockRestore();
+      }
+    });
+
     it('should still emit standard attributes when the hook throws', () => {
       instrumentation = new ErrorsInstrumentation({
         enabled: false,
