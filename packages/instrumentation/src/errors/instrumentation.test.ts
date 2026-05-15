@@ -276,6 +276,42 @@ describe('ErrorsInstrumentation', () => {
       );
     });
 
+    it('should merge custom attributes on the event.message fallback path', () => {
+      instrumentation = new ErrorsInstrumentation({
+        enabled: false,
+        applyCustomAttributes: (error) => ({
+          'app.custom.exception':
+            typeof error === 'string'
+              ? error.toLocaleUpperCase()
+              : error.message.toLocaleUpperCase(),
+        }),
+      });
+      instrumentation.enable();
+
+      dispatchErrorEvent(undefined, 'Script error.');
+
+      const logs = getErrorLogs();
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.attributes[ATTR_EXCEPTION_MESSAGE]).toBe('Script error.');
+      expect(logs[0]?.attributes['app.custom.exception']).toBe('SCRIPT ERROR.');
+    });
+
+    it('should let custom attributes override the message on the fallback path', () => {
+      instrumentation = new ErrorsInstrumentation({
+        enabled: false,
+        applyCustomAttributes: () => ({
+          [ATTR_EXCEPTION_MESSAGE]: 'overridden',
+        }),
+      });
+      instrumentation.enable();
+
+      dispatchErrorEvent(undefined, 'Script error.');
+
+      const logs = getErrorLogs();
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.attributes[ATTR_EXCEPTION_MESSAGE]).toBe('overridden');
+    });
+
     it('should still emit standard attributes when the hook throws', () => {
       instrumentation = new ErrorsInstrumentation({
         enabled: false,
