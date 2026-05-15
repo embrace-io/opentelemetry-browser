@@ -66,12 +66,12 @@ export class ErrorsInstrumentation extends InstrumentationBase<ErrorsInstrumenta
       'reason' in event ? event.reason : event.error;
 
     if (error == null) {
-      // Cross-origin scripts and some older browsers deliver an ErrorEvent
-      // with `event.error` unset but a populated `event.message` (e.g. the
-      // canonical "Script error." sanitized message). Fall back to the
-      // message so these events still surface as an exception log instead
-      // of being silently dropped. PromiseRejectionEvent has no analogous
-      // message field so it stays a no-op.
+      // Cross-origin scripts deliver an ErrorEvent with `event.error` unset
+      // but a populated `event.message` (the canonical "Script error."
+      // sanitized message). Fall back to the message so these events still
+      // surface as an exception log instead of being silently dropped.
+      // PromiseRejectionEvent has no analogous message field so it stays a
+      // no-op.
       if (
         !('reason' in event) &&
         typeof event.message === 'string' &&
