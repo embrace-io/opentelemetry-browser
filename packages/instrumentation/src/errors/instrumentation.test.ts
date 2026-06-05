@@ -129,6 +129,26 @@ describe('ErrorsInstrumentation', () => {
       instrumentation.enable();
     });
 
+    it('should emit using event.message when the ErrorEvent has no error object', () => {
+      // Cross-origin scripts and some older browsers surface an ErrorEvent with
+      // a null `error` but a populated `message`; it must not be dropped.
+      const event = new Event('error', { cancelable: true });
+      Object.defineProperty(event, 'message', { value: 'Script error.' });
+      const suppress = (e: Event) => e.preventDefault();
+      window.addEventListener('error', suppress, { capture: true });
+      try {
+        window.dispatchEvent(event);
+      } finally {
+        window.removeEventListener('error', suppress, { capture: true });
+      }
+
+      const logs = getErrorLogs();
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.attributes?.[ATTR_EXCEPTION_MESSAGE]).toBe(
+        'Script error.',
+      );
+    });
+
     it('should emit an exception event when an Error is thrown', () => {
       dispatchErrorEvent(new ValidationError('Something happened!'));
 

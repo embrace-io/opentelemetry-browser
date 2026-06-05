@@ -56,11 +56,19 @@ export class ErrorsInstrumentation extends InstrumentationBase<ErrorsInstrumenta
   }
 
   private _onError(event: ErrorEvent | PromiseRejectionEvent): void {
-    const error: Error | string | null | undefined =
+    let error: Error | string | null | undefined =
       'reason' in event ? event.reason : event.error;
 
     if (error == null) {
-      return;
+      // Some ErrorEvents (cross-origin scripts, older browsers) arrive with a
+      // null `error` but a populated `message`. Fall back to the message rather
+      // than dropping the event. PromiseRejectionEvents carry no message, so a
+      // null reason is still dropped.
+      const message = 'reason' in event ? undefined : event.message;
+      if (typeof message !== 'string' || message.length === 0) {
+        return;
+      }
+      error = message;
     }
 
     let errorAttributes: AnyValueMap;
