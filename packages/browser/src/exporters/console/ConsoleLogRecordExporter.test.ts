@@ -4,6 +4,7 @@
  */
 
 import type { HrTime } from '@opentelemetry/api';
+import { diag } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
@@ -124,7 +125,8 @@ describe('ConsoleLogRecordExporter', () => {
     expect(call?.[1]).toContain('#123456');
   });
 
-  it('still reports SUCCESS when rendering throws', () => {
+  it('still reports SUCCESS and reports the error via diag when rendering throws', () => {
+    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementation(() => {
       throw new Error('boom');
     });
@@ -132,6 +134,24 @@ describe('ConsoleLogRecordExporter', () => {
     const callback = vi.fn();
 
     expect(() => exporter.export([fakeLog()], callback)).not.toThrow();
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(diagError).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates a failing log record and still renders the rest of the batch', () => {
+    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
+    groupCollapsed.mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    exporter.export([fakeLog(), fakeLog({ body: 'second message' })], callback);
+
+    // First record threw and was reported; the second still rendered.
+    expect(diagError).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed).toHaveBeenCalledTimes(2);
+    expect(groupCollapsed.mock.calls[1]?.[0]).toContain('second message');
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 

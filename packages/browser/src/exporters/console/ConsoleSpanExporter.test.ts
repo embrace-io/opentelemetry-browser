@@ -4,7 +4,7 @@
  */
 
 import type { HrTime } from '@opentelemetry/api';
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { diag, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import type { MockInstance } from 'vitest';
@@ -121,7 +121,8 @@ describe('ConsoleSpanExporter', () => {
     await expect(exporter.forceFlush()).resolves.toBeUndefined();
   });
 
-  it('still reports SUCCESS when rendering throws', () => {
+  it('still reports SUCCESS and reports the error via diag when rendering throws', () => {
+    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementation(() => {
       throw new Error('boom');
     });
@@ -129,6 +130,24 @@ describe('ConsoleSpanExporter', () => {
     const callback = vi.fn();
 
     expect(() => exporter.export([fakeSpan()], callback)).not.toThrow();
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(diagError).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates a failing span and still renders the rest of the batch', () => {
+    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
+    groupCollapsed.mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    exporter.export([fakeSpan(), fakeSpan({ name: 'second.span' })], callback);
+
+    // First span threw and was reported; the second still rendered.
+    expect(diagError).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed).toHaveBeenCalledTimes(2);
+    expect(groupCollapsed.mock.calls[1]?.[0]).toContain('second.span');
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 });

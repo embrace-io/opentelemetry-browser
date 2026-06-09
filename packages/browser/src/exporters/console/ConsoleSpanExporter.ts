@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { diag } from '@opentelemetry/api';
 import type { ExportResult } from '@opentelemetry/core';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
@@ -21,13 +22,18 @@ export class ConsoleSpanExporter implements SpanExporter {
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    try {
-      for (const span of spans) {
+    for (const span of spans) {
+      try {
         renderSpan(span, this._config);
+      } catch (err) {
+        // A console exporter must never break the export pipeline, but it must
+        // not fail silently either: surface the render error via diag and keep
+        // rendering the rest of the batch.
+        diag.error('ConsoleSpanExporter failed to render a span', err);
       }
-    } catch {
-      // A console exporter must never break the export pipeline.
     }
+    // Always report SUCCESS: a render failure is cosmetic, and reporting FAILED
+    // would make the span processor treat the batch as dropped and retry it.
     resultCallback({ code: ExportResultCode.SUCCESS });
   }
 
