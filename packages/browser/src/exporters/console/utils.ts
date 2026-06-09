@@ -8,10 +8,10 @@ import { SeverityNumber } from '@opentelemetry/api-logs';
 import { hrTimeToMilliseconds } from '@opentelemetry/core';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
-import type { ConsoleExporterConfig, Level } from './types.ts';
+import type { BadgeLevel, ConsoleExporterConfig } from './types.ts';
 
 /** Default badge background colors per level. */
-export const DEFAULT_COLORS: Record<Level, string> = {
+export const DEFAULT_COLORS: Record<BadgeLevel, string> = {
   trace: '#6b7280',
   debug: '#6b7280',
   info: '#0891b2',
@@ -21,7 +21,7 @@ export const DEFAULT_COLORS: Record<Level, string> = {
 };
 
 /** Map a log record's SeverityNumber to a visual level. */
-export function levelForSeverity(severity?: SeverityNumber): Level {
+export function levelForSeverity(severity?: SeverityNumber): BadgeLevel {
   if (severity === undefined || severity <= SeverityNumber.UNSPECIFIED) {
     return 'info';
   }
@@ -41,16 +41,8 @@ export function levelForSeverity(severity?: SeverityNumber): Level {
 }
 
 /** Map a span status code to a visual level. */
-export function levelForStatus(code: SpanStatusCode): Level {
+export function levelForStatus(code: SpanStatusCode): BadgeLevel {
   return code === SpanStatusCode.ERROR ? 'error' : 'ok';
-}
-
-/** Resolve the badge color for a level, honoring per-level overrides. */
-export function colorForLevel(
-  level: Level,
-  overrides?: Partial<Record<Level, string>>,
-): string {
-  return overrides?.[level] ?? DEFAULT_COLORS[level];
 }
 
 const HEADER_STYLE_RESET = 'color:inherit;font-weight:normal';
@@ -62,13 +54,13 @@ function badgeStyle(color: string): string {
 /** Emit a collapsed (or expanded) console group with a styled badge header. */
 function renderGroup(
   scope: string,
-  level: Level,
+  level: BadgeLevel,
   badgeLabel: string,
   message: string,
   detail: Record<string, unknown>,
   config: ConsoleExporterConfig,
 ): void {
-  const color = colorForLevel(level, config.colors);
+  const color = DEFAULT_COLORS[level];
   const header = `%c ${scope} · ${badgeLabel} %c ${message}`;
   const styleArgs = [badgeStyle(color), HEADER_STYLE_RESET];
 

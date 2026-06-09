@@ -5,4 +5,4 @@
 
 export { ConsoleLogRecordExporter } from './console/ConsoleLogRecordExporter.ts';
 export { ConsoleSpanExporter } from './console/ConsoleSpanExporter.ts';
-export type { ConsoleExporterConfig, Level } from './console/types.ts';
+export type { BadgeLevel, ConsoleExporterConfig } from './console/types.ts';

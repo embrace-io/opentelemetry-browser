@@ -6,10 +6,8 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { describe, expect, it } from 'vitest';
-import type { Level } from './types.ts';
+import type { BadgeLevel } from './types.ts';
 import {
-  colorForLevel,
-  DEFAULT_COLORS,
   levelForSeverity,
   levelForStatus,
   stringifyBody,
@@ -48,7 +46,7 @@ describe('levelForSeverity', () => {
 
   // Lock the exact band edges, where an off-by-one in the `<=` cascade would
   // hide. Each row is the raw SeverityNumber value and the level it must map to.
-  it.each<[number, Level]>([
+  it.each<[number, BadgeLevel]>([
     [-1, 'info'], // below UNSPECIFIED
     [0, 'info'], // UNSPECIFIED
     [1, 'trace'], // TRACE (first of band)
@@ -75,23 +73,6 @@ describe('levelForStatus', () => {
   it('maps OK and UNSET status to "ok"', () => {
     expect(levelForStatus(SpanStatusCode.OK)).toBe('ok');
     expect(levelForStatus(SpanStatusCode.UNSET)).toBe('ok');
-  });
-});
-
-describe('colorForLevel', () => {
-  it('returns the default color for a level', () => {
-    expect(colorForLevel('info')).toBe(DEFAULT_COLORS.info);
-    expect(colorForLevel('ok')).toBe(DEFAULT_COLORS.ok);
-  });
-
-  it('prefers an override when provided for that level', () => {
-    expect(colorForLevel('info', { info: '#000000' })).toBe('#000000');
-  });
-
-  it('falls back to default when override omits the level', () => {
-    expect(colorForLevel('warn', { info: '#000000' })).toBe(
-      DEFAULT_COLORS.warn,
-    );
   });
 });
 

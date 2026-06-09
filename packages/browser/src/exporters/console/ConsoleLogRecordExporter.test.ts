@@ -115,16 +115,6 @@ describe('ConsoleLogRecordExporter', () => {
     expect(groupCollapsed).not.toHaveBeenCalled();
   });
 
-  it('applies a color override for the level', () => {
-    const exporter = new ConsoleLogRecordExporter({
-      colors: { info: '#123456' },
-    });
-    exporter.export([fakeLog()], vi.fn());
-
-    const call = groupCollapsed.mock.calls[0];
-    expect(call?.[1]).toContain('#123456');
-  });
-
   it('still reports SUCCESS and reports the error via diag when rendering throws', () => {
     const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementation(() => {

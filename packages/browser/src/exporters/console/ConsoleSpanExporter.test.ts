@@ -105,16 +105,6 @@ describe('ConsoleSpanExporter', () => {
     expect(groupCollapsed).not.toHaveBeenCalled();
   });
 
-  it('applies a color override for the level', () => {
-    const exporter = new ConsoleSpanExporter({
-      colors: { ok: '#123456' },
-    });
-    exporter.export([fakeSpan()], vi.fn());
-
-    const [, badgeStyle] = groupCollapsed.mock.calls[0] ?? [];
-    expect(badgeStyle).toContain('#123456');
-  });
-
   it('does not throw and still reports SUCCESS on a circular attribute value', () => {
     const circular: Record<string, unknown> = {};
     circular['self'] = circular;
