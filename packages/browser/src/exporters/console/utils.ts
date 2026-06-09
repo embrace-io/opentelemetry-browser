@@ -113,7 +113,8 @@ export function renderSpan(
   );
 }
 
-function stringifyBody(body: unknown): string {
+/** Render a log body as a header string, falling back gracefully when it is not serializable. */
+export function stringifyBody(body: unknown): string {
   if (typeof body === 'string') {
     return body;
   }

@@ -6,11 +6,13 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { describe, expect, it } from 'vitest';
+import type { Level } from './types.ts';
 import {
   colorForLevel,
   DEFAULT_COLORS,
   levelForSeverity,
   levelForStatus,
+  stringifyBody,
 } from './utils.ts';
 
 describe('levelForSeverity', () => {
@@ -43,6 +45,26 @@ describe('levelForSeverity', () => {
     expect(levelForSeverity(SeverityNumber.UNSPECIFIED)).toBe('info');
     expect(levelForSeverity(undefined)).toBe('info');
   });
+
+  // Lock the exact band edges, where an off-by-one in the `<=` cascade would
+  // hide. Each row is the raw SeverityNumber value and the level it must map to.
+  it.each<[number, Level]>([
+    [-1, 'info'], // below UNSPECIFIED
+    [0, 'info'], // UNSPECIFIED
+    [1, 'trace'], // TRACE (first of band)
+    [4, 'trace'], // TRACE4 (last of band)
+    [5, 'debug'], // DEBUG (first of band)
+    [8, 'debug'], // DEBUG4 (last of band)
+    [9, 'info'], // INFO (first of band)
+    [12, 'info'], // INFO4 (last of band)
+    [13, 'warn'], // WARN (first of band)
+    [16, 'warn'], // WARN4 (last of band)
+    [17, 'error'], // ERROR (first of band)
+    [24, 'error'], // FATAL4 (last of band)
+    [25, 'error'], // above FATAL4
+  ])('maps severity %i to "%s"', (severity, expected) => {
+    expect(levelForSeverity(severity as SeverityNumber)).toBe(expected);
+  });
 });
 
 describe('levelForStatus', () => {
@@ -70,5 +92,28 @@ describe('colorForLevel', () => {
     expect(colorForLevel('warn', { info: '#000000' })).toBe(
       DEFAULT_COLORS.warn,
     );
+  });
+});
+
+describe('stringifyBody', () => {
+  it('returns strings unchanged', () => {
+    expect(stringifyBody('already a string')).toBe('already a string');
+  });
+
+  it('JSON-stringifies serializable non-string bodies', () => {
+    expect(stringifyBody({ a: 1, b: 'two' })).toBe('{"a":1,"b":"two"}');
+    expect(stringifyBody([1, 2, 3])).toBe('[1,2,3]');
+    expect(stringifyBody(42)).toBe('42');
+  });
+
+  it('falls back to String() when JSON.stringify yields undefined', () => {
+    // JSON.stringify(undefined) returns undefined, so the `?? String(body)` arm takes over.
+    expect(stringifyBody(undefined)).toBe('undefined');
+  });
+
+  it('falls back to String() when JSON.stringify throws on a circular body', () => {
+    const circular: Record<string, unknown> = {};
+    circular['self'] = circular;
+    expect(stringifyBody(circular)).toBe('[object Object]');
   });
 });

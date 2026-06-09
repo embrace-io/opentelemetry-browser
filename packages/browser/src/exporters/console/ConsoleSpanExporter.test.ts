@@ -115,6 +115,25 @@ describe('ConsoleSpanExporter', () => {
     expect(badgeStyle).toContain('#123456');
   });
 
+  it('does not throw and still reports SUCCESS on a circular attribute value', () => {
+    const circular: Record<string, unknown> = {};
+    circular['self'] = circular;
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    expect(() =>
+      exporter.export(
+        [
+          fakeSpan({
+            attributes: circular as unknown as ReadableSpan['attributes'],
+          }),
+        ],
+        callback,
+      ),
+    ).not.toThrow();
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
   it('resolves shutdown and forceFlush', async () => {
     const exporter = new ConsoleSpanExporter();
     await expect(exporter.shutdown()).resolves.toBeUndefined();
