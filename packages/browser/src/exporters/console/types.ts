@@ -9,11 +9,13 @@ export type Level = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'ok';
 /** Options shared by both browser console exporters. */
 export interface ConsoleExporterConfig {
   /**
-   * Render each signal with `console.groupCollapsed` (true, the default) so
-   * groups start collapsed, or `console.group` (false) so they start expanded.
+   * Controls whether each signal's group starts collapsed. Defaults to
+   * collapsed when unset. Only an explicit `false` expands the group via
+   * `console.group`; any other value (including `true` or `undefined`) uses
+   * `console.groupCollapsed`.
    */
   collapsed?: boolean;
 
-  /** Override the badge background color for one or more levels. */
+  /** Override the badge background (a CSS color) for one or more levels. */
   colors?: Partial<Record<Level, string>>;
 }

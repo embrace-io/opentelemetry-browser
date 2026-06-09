@@ -72,6 +72,7 @@ function renderGroup(
   const header = `%c ${scope} · ${badgeLabel} %c ${message}`;
   const styleArgs = [badgeStyle(color), HEADER_STYLE_RESET];
 
+  // Only an explicit `false` expands; unset stays collapsed (see ConsoleExporterConfig.collapsed).
   if (config.collapsed === false) {
     console.group(header, ...styleArgs);
   } else {
