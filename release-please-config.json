@@ -3,7 +3,18 @@
   "bootstrap-sha": "07491d86505adfc79d7951cb6567400734296d80",
   "bump-minor-pre-major": true,
   "sequential-calls": true,
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "opentelemetry-browser",
+      "components": ["browser", "browser-instrumentation"]
+    }
+  ],
   "packages": {
+    "packages/browser": {
+      "component": "browser",
+      "changelog-path": "CHANGELOG.md"
+    },
     "packages/instrumentation": {
       "component": "browser-instrumentation",
       "changelog-path": "CHANGELOG.md"

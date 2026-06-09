@@ -1,0 +1,49 @@
+{
+  "name": "@opentelemetry/browser",
+  "version": "0.5.2",
+  "description": "OpenTelemetry browser SDK and exporters.",
+  "keywords": [
+    "opentelemetry",
+    "browser",
+    "web",
+    "exporter",
+    "console",
+    "sdk"
+  ],
+  "homepage": "https://github.com/open-telemetry/opentelemetry-browser",
+  "bugs": "https://github.com/open-telemetry/opentelemetry-browser/issues",
+  "license": "Apache-2.0",
+  "author": "OpenTelemetry Authors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-telemetry/opentelemetry-browser.git",
+    "directory": "packages/browser"
+  },
+  "type": "module",
+  "exports": {
+    "./exporters": "./dist/exporters/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch --no-clean",
+    "check-types": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --coverage"
+  },
+  "dependencies": {
+    "@opentelemetry/api-logs": "^0.218.0",
+    "@opentelemetry/core": "^2.7.1",
+    "@opentelemetry/sdk-logs": "^0.218.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.1"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
