@@ -1,5 +1,9 @@
 import './style.css';
 import { logs } from '@opentelemetry/api-logs';
+import {
+  ConsoleLogRecordExporter,
+  ConsoleSpanExporter,
+} from '@opentelemetry/browser/exporters';
 import { NavigationTimingInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/navigation-timing';
 import { UserActionInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/user-action';
 import { WebVitalsInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/web-vitals';
@@ -12,12 +16,10 @@ import {
   resourceFromAttributes,
 } from '@opentelemetry/resources';
 import {
-  ConsoleLogRecordExporter,
   LoggerProvider,
   SimpleLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import {
-  ConsoleSpanExporter,
   SimpleSpanProcessor,
   WebTracerProvider,
 } from '@opentelemetry/sdk-trace-web';

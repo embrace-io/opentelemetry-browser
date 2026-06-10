@@ -7,11 +7,7 @@ import { SpanStatusCode } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { describe, expect, it } from 'vitest';
 import type { BadgeLevel } from './types.ts';
-import {
-  levelForSeverity,
-  levelForStatus,
-  stringifyBody,
-} from './utils.ts';
+import { levelForSeverity, levelForStatus, stringifyBody } from './utils.ts';
 
 describe('levelForSeverity', () => {
   it('maps trace severities to "trace"', () => {
