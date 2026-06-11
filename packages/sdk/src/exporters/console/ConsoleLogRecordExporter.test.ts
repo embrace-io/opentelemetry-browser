@@ -156,10 +156,12 @@ describe('ConsoleLogRecordExporter', () => {
     });
     const exporter = new ConsoleLogRecordExporter();
     const callback = vi.fn();
+    const log = fakeLog();
 
-    exporter.export([fakeLog()], callback);
+    exporter.export([log], callback);
 
     expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls[0]).toContain(log);
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 

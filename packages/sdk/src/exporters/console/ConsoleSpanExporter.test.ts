@@ -192,10 +192,12 @@ describe('ConsoleSpanExporter', () => {
     });
     const exporter = new ConsoleSpanExporter();
     const callback = vi.fn();
+    const span = fakeSpan();
 
-    exporter.export([fakeSpan()], callback);
+    exporter.export([span], callback);
 
     expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls[0]).toContain(span);
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 

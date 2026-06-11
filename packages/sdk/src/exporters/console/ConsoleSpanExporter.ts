@@ -33,12 +33,16 @@ export class ConsoleSpanExporter implements SpanExporter {
         // a no-op unless the app registered a logger), and both calls are
         // guarded so a broken console or diag logger cannot stop the loop.
         try {
-          console.error('ConsoleSpanExporter failed to render a span', err);
+          console.error(
+            'ConsoleSpanExporter failed to render a span',
+            span,
+            err,
+          );
         } catch {
           // The console itself is broken; there is nowhere left to report.
         }
         try {
-          diag.error('ConsoleSpanExporter failed to render a span', err);
+          diag.error('ConsoleSpanExporter failed to render a span', span, err);
         } catch {
           // A throwing DiagLogger must not break the export pipeline.
         }

@@ -38,6 +38,7 @@ export class ConsoleLogRecordExporter implements LogRecordExporter {
         try {
           console.error(
             'ConsoleLogRecordExporter failed to render a log record',
+            log,
             err,
           );
         } catch {
@@ -46,6 +47,7 @@ export class ConsoleLogRecordExporter implements LogRecordExporter {
         try {
           diag.error(
             'ConsoleLogRecordExporter failed to render a log record',
+            log,
             err,
           );
         } catch {
