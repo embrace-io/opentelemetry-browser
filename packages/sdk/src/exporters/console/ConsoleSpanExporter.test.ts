@@ -143,6 +143,38 @@ describe('ConsoleSpanExporter', () => {
     expect(diagError).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a render failure via console.error even when no diag logger is registered', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    groupCollapsed.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    exporter.export([fakeSpan()], callback);
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
+  it('still invokes the callback when the registered diag logger throws', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(diag, 'error').mockImplementation(() => {
+      throw new Error('diag logger is broken');
+    });
+    groupCollapsed.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    expect(() => exporter.export([fakeSpan()], callback)).not.toThrow();
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
   it('closes the group when console.dir throws so later output is not nested', () => {
     vi.spyOn(diag, 'error').mockImplementation(() => {});
     dir.mockImplementation(() => {

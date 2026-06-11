@@ -30,12 +30,26 @@ export class ConsoleLogRecordExporter implements LogRecordExporter {
         renderLog(log, this._config);
       } catch (err) {
         // A console exporter must never break the export pipeline, but it must
-        // not fail silently either: surface the render error via diag and keep
-        // rendering the rest of the batch.
-        diag.error(
-          'ConsoleLogRecordExporter failed to render a log record',
-          err,
-        );
+        // not fail silently either: surface the render error and keep rendering
+        // the rest of the batch. console.error is the primary surface (diag is
+        // a no-op unless the app registered a logger), and both calls are
+        // guarded so a broken console or diag logger cannot stop the loop.
+        try {
+          console.error(
+            'ConsoleLogRecordExporter failed to render a log record',
+            err,
+          );
+        } catch {
+          // The console itself is broken; there is nowhere left to report.
+        }
+        try {
+          diag.error(
+            'ConsoleLogRecordExporter failed to render a log record',
+            err,
+          );
+        } catch {
+          // A throwing DiagLogger must not break the export pipeline.
+        }
       }
     }
     // Always report SUCCESS: a render failure is cosmetic, and reporting FAILED
