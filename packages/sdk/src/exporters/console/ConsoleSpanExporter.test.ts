@@ -105,6 +105,14 @@ describe('ConsoleSpanExporter', () => {
     expect(groupCollapsed).not.toHaveBeenCalled();
   });
 
+  it('collapses when collapsed is explicitly true, same as unset', () => {
+    const exporter = new ConsoleSpanExporter({ collapsed: true });
+    exporter.export([fakeSpan()], vi.fn());
+
+    expect(groupCollapsed).toHaveBeenCalledTimes(1);
+    expect(group).not.toHaveBeenCalled();
+  });
+
   it('snapshots the config so later mutation does not change behavior', () => {
     const config = { collapsed: false };
     const exporter = new ConsoleSpanExporter(config);

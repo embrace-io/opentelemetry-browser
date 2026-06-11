@@ -128,6 +128,14 @@ describe('ConsoleLogRecordExporter', () => {
     expect(diagError).toHaveBeenCalledTimes(1);
   });
 
+  it('collapses when collapsed is explicitly true, same as unset', () => {
+    const exporter = new ConsoleLogRecordExporter({ collapsed: true });
+    exporter.export([fakeLog()], vi.fn());
+
+    expect(groupCollapsed).toHaveBeenCalledTimes(1);
+    expect(group).not.toHaveBeenCalled();
+  });
+
   it('snapshots the config so later mutation does not change behavior', () => {
     const config = { collapsed: false };
     const exporter = new ConsoleLogRecordExporter(config);
