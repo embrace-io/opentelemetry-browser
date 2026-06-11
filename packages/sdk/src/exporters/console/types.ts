@@ -9,9 +9,8 @@ export type BadgeLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'ok';
 /** Options shared by both browser console exporters. */
 export interface ConsoleExporterConfig {
   /**
-   * Controls whether each signal's group starts collapsed. Defaults to
-   * collapsed when unset. Only an explicit `false` expands the group via
-   * `console.group`; any other value (including `true` or `undefined`) uses
+   * Controls whether each signal's group starts collapsed. Only an explicit
+   * `false` expands the group via `console.group`; `true` or unset uses
    * `console.groupCollapsed`.
    */
   readonly collapsed?: boolean;
