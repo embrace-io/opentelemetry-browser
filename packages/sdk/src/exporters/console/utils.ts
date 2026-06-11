@@ -10,8 +10,8 @@ import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import type { BadgeLevel, ConsoleExporterConfig } from './types.ts';
 
-/** Default badge background colors per level. */
-export const DEFAULT_COLORS: Record<BadgeLevel, string> = {
+/** Badge background colors per level. */
+export const BADGE_COLORS: Readonly<Record<BadgeLevel, string>> = {
   trace: '#6b7280',
   debug: '#6b7280',
   info: '#0891b2',
@@ -60,7 +60,7 @@ function renderGroup(
   detail: Record<string, unknown>,
   config: ConsoleExporterConfig,
 ): void {
-  const color = DEFAULT_COLORS[level];
+  const color = BADGE_COLORS[level];
   const header = `%c ${scope} · ${badgeLabel} %c ${message}`;
   const styleArgs = [badgeStyle(color), HEADER_STYLE_RESET];
 

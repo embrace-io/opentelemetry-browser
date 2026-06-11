@@ -10,7 +10,7 @@ import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleSpanExporter } from './ConsoleSpanExporter.ts';
-import { DEFAULT_COLORS } from './utils.ts';
+import { BADGE_COLORS } from './utils.ts';
 
 function fakeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
   const startTime: HrTime = [1700000000, 0];
@@ -69,7 +69,7 @@ describe('ConsoleSpanExporter', () => {
     expect(header).toContain('%c user-action · SPAN %c');
     expect(header).toContain('checkout.submit');
     expect(header).toContain('142ms');
-    expect(badgeStyle).toContain(DEFAULT_COLORS.ok);
+    expect(badgeStyle).toContain(BADGE_COLORS.ok);
 
     expect(dir).toHaveBeenCalledTimes(1);
     const detail = dir.mock.calls[0]?.[0];
@@ -94,7 +94,7 @@ describe('ConsoleSpanExporter', () => {
 
     const [header, badgeStyle] = groupCollapsed.mock.calls[0] ?? [];
     expect(header).toContain('user-action · SPAN ERR');
-    expect(badgeStyle).toContain(DEFAULT_COLORS.error);
+    expect(badgeStyle).toContain(BADGE_COLORS.error);
   });
 
   it('uses console.group (not collapsed) when collapsed is false', () => {

@@ -11,7 +11,7 @@ import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleLogRecordExporter } from './ConsoleLogRecordExporter.ts';
-import { DEFAULT_COLORS } from './utils.ts';
+import { BADGE_COLORS } from './utils.ts';
 
 function fakeLog(
   overrides: Partial<ReadableLogRecord> = {},
@@ -64,7 +64,7 @@ describe('ConsoleLogRecordExporter', () => {
     const badgeStyle = call?.[1];
     expect(header).toContain('%c console · INFO %c');
     expect(header).toContain('user clicked button');
-    expect(badgeStyle).toContain(DEFAULT_COLORS.info);
+    expect(badgeStyle).toContain(BADGE_COLORS.info);
 
     const detail = dir.mock.calls[0]?.[0];
     expect(detail).toMatchObject({
@@ -90,7 +90,7 @@ describe('ConsoleLogRecordExporter', () => {
     );
     const call = groupCollapsed.mock.calls[0];
     expect(call?.[0]).toContain('console · ERROR');
-    expect(call?.[1]).toContain(DEFAULT_COLORS.error);
+    expect(call?.[1]).toContain(BADGE_COLORS.error);
   });
 
   it('derives a badge label from severity when severityText is absent', () => {
