@@ -244,6 +244,30 @@ describe('ConsoleSpanExporter', () => {
     expect(diagError).toHaveBeenCalledTimes(1);
     expect(groupCollapsed).toHaveBeenCalledTimes(2);
     expect(groupCollapsed.mock.calls[1]?.[0]).toContain('second.span');
+    expect(callback).toHaveBeenCalledTimes(1);
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
+  it('reports SUCCESS exactly once for an empty batch', () => {
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    exporter.export([], callback);
+
+    expect(groupCollapsed).not.toHaveBeenCalled();
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
+  it('renders a root span without a parent span id', () => {
+    const exporter = new ConsoleSpanExporter();
+
+    exporter.export([fakeSpan({ parentSpanContext: undefined })], vi.fn());
+
+    expect(dir).toHaveBeenCalledTimes(1);
+    expect(dir.mock.calls[0]?.[0]).toMatchObject({
+      parentSpanId: undefined,
+      name: 'checkout.submit',
+    });
   });
 });

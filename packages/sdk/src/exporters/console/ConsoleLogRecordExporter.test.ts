@@ -208,6 +208,18 @@ describe('ConsoleLogRecordExporter', () => {
     expect(diagError).toHaveBeenCalledTimes(1);
     expect(groupCollapsed).toHaveBeenCalledTimes(2);
     expect(groupCollapsed.mock.calls[1]?.[0]).toContain('second message');
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
+  it('reports SUCCESS exactly once for an empty batch', () => {
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    exporter.export([], callback);
+
+    expect(groupCollapsed).not.toHaveBeenCalled();
+    expect(callback).toHaveBeenCalledTimes(1);
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 
