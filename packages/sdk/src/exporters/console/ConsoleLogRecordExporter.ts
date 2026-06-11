@@ -18,7 +18,8 @@ export class ConsoleLogRecordExporter implements LogRecordExporter {
   private readonly _config: ConsoleExporterConfig;
 
   constructor(config: ConsoleExporterConfig = {}) {
-    this._config = config;
+    // Snapshot so mutating the caller's object cannot change behavior later.
+    this._config = { ...config };
   }
 
   export(

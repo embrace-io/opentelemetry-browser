@@ -14,5 +14,5 @@ export interface ConsoleExporterConfig {
    * `console.group`; any other value (including `true` or `undefined`) uses
    * `console.groupCollapsed`.
    */
-  collapsed?: boolean;
+  readonly collapsed?: boolean;
 }

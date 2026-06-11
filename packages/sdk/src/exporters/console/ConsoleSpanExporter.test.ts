@@ -105,6 +105,17 @@ describe('ConsoleSpanExporter', () => {
     expect(groupCollapsed).not.toHaveBeenCalled();
   });
 
+  it('snapshots the config so later mutation does not change behavior', () => {
+    const config = { collapsed: false };
+    const exporter = new ConsoleSpanExporter(config);
+    config.collapsed = true;
+
+    exporter.export([fakeSpan()], vi.fn());
+
+    expect(group).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed).not.toHaveBeenCalled();
+  });
+
   it('does not throw and still reports SUCCESS on a circular attribute value', () => {
     const circular: Record<string, unknown> = {};
     circular['self'] = circular;

@@ -128,6 +128,17 @@ describe('ConsoleLogRecordExporter', () => {
     expect(diagError).toHaveBeenCalledTimes(1);
   });
 
+  it('snapshots the config so later mutation does not change behavior', () => {
+    const config = { collapsed: false };
+    const exporter = new ConsoleLogRecordExporter(config);
+    config.collapsed = true;
+
+    exporter.export([fakeLog()], vi.fn());
+
+    expect(group).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed).not.toHaveBeenCalled();
+  });
+
   it('reports a render failure via console.error even when no diag logger is registered', () => {
     const consoleError = vi
       .spyOn(console, 'error')
