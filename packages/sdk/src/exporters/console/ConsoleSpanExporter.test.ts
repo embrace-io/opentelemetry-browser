@@ -143,6 +143,19 @@ describe('ConsoleSpanExporter', () => {
     expect(diagError).toHaveBeenCalledTimes(1);
   });
 
+  it('closes the group when console.dir throws so later output is not nested', () => {
+    vi.spyOn(diag, 'error').mockImplementation(() => {});
+    dir.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    expect(() => exporter.export([fakeSpan()], callback)).not.toThrow();
+    expect(groupEnd).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
   it('isolates a failing span and still renders the rest of the batch', () => {
     const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementationOnce(() => {

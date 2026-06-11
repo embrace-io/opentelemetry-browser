@@ -70,8 +70,13 @@ function renderGroup(
   } else {
     console.groupCollapsed(header, ...styleArgs);
   }
-  console.dir(detail);
-  console.groupEnd();
+  // The group is open from here on: close it even if rendering the detail
+  // throws, so the failure cannot nest all later console output.
+  try {
+    console.dir(detail);
+  } finally {
+    console.groupEnd();
+  }
 }
 
 /** Render a single span as a styled console group. */

@@ -128,6 +128,19 @@ describe('ConsoleLogRecordExporter', () => {
     expect(diagError).toHaveBeenCalledTimes(1);
   });
 
+  it('closes the group when console.dir throws so later output is not nested', () => {
+    vi.spyOn(diag, 'error').mockImplementation(() => {});
+    dir.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    expect(() => exporter.export([fakeLog()], callback)).not.toThrow();
+    expect(groupEnd).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
   it('isolates a failing log record and still renders the rest of the batch', () => {
     const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementationOnce(() => {
