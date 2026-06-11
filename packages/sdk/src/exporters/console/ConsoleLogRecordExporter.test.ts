@@ -226,6 +226,30 @@ describe('ConsoleLogRecordExporter', () => {
     expect(groupCollapsed.mock.calls[0]?.[0]).toContain('[object Object]');
   });
 
+  it('isolates a structurally malformed log record and still renders the rest of the batch', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    exporter.export(
+      [
+        fakeLog({
+          instrumentationScope:
+            undefined as unknown as ReadableLogRecord['instrumentationScope'],
+        }),
+        fakeLog({ body: 'healthy message' }),
+      ],
+      callback,
+    );
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed.mock.calls[0]?.[0]).toContain('healthy message');
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
   it('resolves shutdown and forceFlush', async () => {
     const exporter = new ConsoleLogRecordExporter();
     await expect(exporter.shutdown()).resolves.toBeUndefined();

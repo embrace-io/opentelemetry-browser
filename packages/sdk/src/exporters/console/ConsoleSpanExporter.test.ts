@@ -143,6 +143,27 @@ describe('ConsoleSpanExporter', () => {
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 
+  it('isolates a structurally malformed span and still renders the rest of the batch', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    exporter.export(
+      [
+        fakeSpan({ status: undefined as unknown as ReadableSpan['status'] }),
+        fakeSpan({ name: 'healthy.span' }),
+      ],
+      callback,
+    );
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed).toHaveBeenCalledTimes(1);
+    expect(groupCollapsed.mock.calls[0]?.[0]).toContain('healthy.span');
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
   it('resolves shutdown and forceFlush', async () => {
     const exporter = new ConsoleSpanExporter();
     await expect(exporter.shutdown()).resolves.toBeUndefined();
