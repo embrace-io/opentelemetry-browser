@@ -7,16 +7,16 @@
     {
       "type": "linked-versions",
       "groupName": "opentelemetry-browser",
-      "components": ["browser", "browser-instrumentation"]
+      "components": ["browser-instrumentation", "browser-sdk"]
     }
   ],
   "packages": {
-    "packages/browser": {
-      "component": "browser",
-      "changelog-path": "CHANGELOG.md"
-    },
     "packages/instrumentation": {
       "component": "browser-instrumentation",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/sdk": {
+      "component": "browser-sdk",
       "changelog-path": "CHANGELOG.md"
     }
   }

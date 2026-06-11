@@ -13,7 +13,7 @@
     "@opentelemetry/api-logs": "^0.218.0",
     "@opentelemetry/sdk-logs": "^0.218.0",
     "@opentelemetry/instrumentation": "^0.218.0",
-    "@opentelemetry/browser": "file:../../packages/browser",
-    "@opentelemetry/browser-instrumentation": "file:../../packages/instrumentation"
+    "@opentelemetry/browser-instrumentation": "file:../../packages/instrumentation",
+    "@opentelemetry/browser-sdk": "file:../../packages/sdk"
   }
 }

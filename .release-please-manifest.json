@@ -1,4 +1,4 @@
 {
-  "packages/browser": "0.5.2",
-  "packages/instrumentation": "0.5.2"
+  "packages/instrumentation": "0.5.2",
+  "packages/sdk": "0.5.2"
 }
