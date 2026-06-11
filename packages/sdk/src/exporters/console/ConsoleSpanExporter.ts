@@ -33,7 +33,8 @@ export class ConsoleSpanExporter implements SpanExporter {
       }
     }
     // Always report SUCCESS: a render failure is cosmetic, and reporting FAILED
-    // would make the span processor treat the batch as dropped and retry it.
+    // would only raise a spurious error through the SDK's global error handler
+    // (span processors never retry a batch).
     resultCallback({ code: ExportResultCode.SUCCESS });
   }
 
