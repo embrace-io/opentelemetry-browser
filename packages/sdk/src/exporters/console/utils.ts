@@ -119,7 +119,13 @@ export function stringifyBody(body: unknown): string {
   try {
     return JSON.stringify(body) ?? String(body);
   } catch {
-    return String(body);
+    try {
+      return String(body);
+    } catch {
+      // A null-prototype object has no toString, so String() throws too. A
+      // bad header preview must not cost the whole record its console.dir.
+      return '[unserializable body]';
+    }
   }
 }
 

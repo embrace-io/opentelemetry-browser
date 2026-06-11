@@ -93,4 +93,11 @@ describe('stringifyBody', () => {
     circular['self'] = circular;
     expect(stringifyBody(circular)).toBe('[object Object]');
   });
+
+  it('returns a placeholder when even String() throws (circular null-prototype body)', () => {
+    // No Object.prototype means no toString, so String() throws too.
+    const hostile: Record<string, unknown> = Object.create(null);
+    hostile['self'] = hostile;
+    expect(stringifyBody(hostile)).toBe('[unserializable body]');
+  });
 });
