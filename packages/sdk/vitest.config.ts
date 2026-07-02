@@ -8,12 +8,21 @@ export default defineConfig({
         test: {
           name: 'browser',
           include: ['src/**/*.test.ts'],
+          exclude: ['src/publicApi.test.ts'],
           browser: {
             provider: playwright(),
             enabled: true,
             headless: true,
             instances: [{ browser: 'chromium' }],
           },
+        },
+      },
+      {
+        test: {
+          name: 'unit',
+          environment: 'node',
+          include: ['src/publicApi.test.ts'],
+          browser: { enabled: false },
         },
       },
     ],

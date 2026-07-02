@@ -1,0 +1,35 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`public API surface > exposes the expected types and values from "." 1`] = `
+"import { LogsConfig, RootConfig, TracesConfig, WebSdk } from "./core/types.js";
+import { QuickStartConfig, quickStartBrowserSdk, startBrowserSdk } from "./startBrowserSdk.js";
+export { type LogsConfig, type QuickStartConfig, type RootConfig, type TracesConfig, type WebSdk, quickStartBrowserSdk, startBrowserSdk };"
+`;
+
+exports[`public API surface > exposes the expected types and values from "./logs" 1`] = `
+"import { LogsConfig, WebSdk } from "../core/types.js";
+import { startLogsSdk } from "./startLogsSdk.js";
+export { type LogsConfig, type WebSdk, startLogsSdk };"
+`;
+
+exports[`public API surface > exposes the expected types and values from "./session" 1`] = `
+"import { SessionIdGenerator } from "./types/SessionIdGenerator.js";
+import { DefaultIdGenerator } from "./DefaultIdGenerator.js";
+import { Session } from "./types/Session.js";
+import { SessionStore } from "./types/SessionStore.js";
+import { LocalStorageSessionStore } from "./LocalStorageSessionStore.js";
+import { SessionProvider } from "./types/SessionProvider.js";
+import { SessionLogRecordProcessor } from "./SessionLogRecordProcessor.js";
+import { SessionObserver } from "./types/SessionObserver.js";
+import { SessionPublisher } from "./types/SessionPublisher.js";
+import { SessionManager, SessionManagerConfig } from "./SessionManager.js";
+import { SessionSpanProcessor } from "./SessionSpanProcessor.js";
+import { createDefaultSessionIdGenerator, createLocalStorageSessionStore, createSessionLogRecordProcessor, createSessionManager, createSessionSpanProcessor } from "./utils.js";
+export { DefaultIdGenerator, LocalStorageSessionStore, type Session, type SessionIdGenerator, SessionLogRecordProcessor, SessionManager, type SessionManagerConfig, type SessionObserver, type SessionProvider, type SessionPublisher, SessionSpanProcessor, type SessionStore, createDefaultSessionIdGenerator, createLocalStorageSessionStore, createSessionLogRecordProcessor, createSessionManager, createSessionSpanProcessor };"
+`;
+
+exports[`public API surface > exposes the expected types and values from "./traces" 1`] = `
+"import { TracesConfig, WebSdk } from "../core/types.js";
+import { startTracesSdk } from "./startTracesSdk.js";
+export { type TracesConfig, type WebSdk, startTracesSdk };"
+`;
