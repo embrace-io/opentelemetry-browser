@@ -70,6 +70,14 @@ export interface BatchProcessorConfig {
    * @defaultValue 512
    */
   maxExportBatchSize?: number;
+  /**
+   * Disable flushing the batch when the user navigates to a new page, closes
+   * the tab or the browser, or, on mobile, switches to a different app.
+   * Auto flush is enabled by default.
+   *
+   * @defaultValue false
+   */
+  disableAutoFlushOnDocumentHide?: boolean;
 }
 
 /**
