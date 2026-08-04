@@ -98,7 +98,7 @@ new NavigationInstrumentation({
 |--------|------|---------|-------------|
 | `useNavigationApiIfAvailable` | `boolean` | `false` | When `true`, subscribes to the Navigation API (`currententrychange`) instead of patching `history.pushState` / `history.replaceState`. Falls back to history patching when the Navigation API is unavailable. |
 | `sanitizeUrl` | `(url: string) => string` | — | Called before the URL is written to `url.full`. |
-| `applyCustomLogRecordData` | `(logRecord: LogRecord) => void` | — | Hook to modify log records before they are emitted. Errors thrown from this hook are caught and logged via the instrumentation diag logger. |
+| `applyCustomLogRecordData` | `ApplyCustomLogRecordDataFunction` | — | Hook to modify the log record before it is emitted. Receives only `attributes` and `body`. See [Customizing log records](#customizing-log-records). |
 
 `defaultSanitizeUrl` is exported for composition — it redacts `user:password@` credentials and a set of common sensitive query parameters (`api_key`, `token`, `password`, etc.).
 
@@ -139,7 +139,7 @@ new NavigationTimingInstrumentation({
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `applyCustomLogRecordData` | `(logRecord: LogRecord) => void` | — | Hook to modify log records before they are emitted. Errors thrown from this hook are caught and logged via the instrumentation diag logger. |
+| `applyCustomLogRecordData` | `ApplyCustomLogRecordDataFunction` | — | Hook to modify the log record before it is emitted. Receives only `attributes` and `body`. See [Customizing log records](#customizing-log-records). |
 
 ---
 
@@ -228,7 +228,7 @@ new UserActionInstrumentation({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `autoCapturedActions` | `AutoCapturedUserAction[]` | `['click']` | Array of actions to automatically capture. |
-| `applyCustomLogRecordData` | `(logRecord: LogRecord) => void` | — | Hook to modify log records before they are emitted. Errors thrown from this hook are caught and logged via the instrumentation diag logger. |
+| `applyCustomLogRecordData` | `ApplyCustomLogRecordDataFunction` | — | Hook to modify the log record before it is emitted. Receives only `attributes` and `body`. See [Customizing log records](#customizing-log-records). |
 
 #### Additional Attributes
 
@@ -255,7 +255,7 @@ Provides automatic instrumentation for [Core Web Vitals](https://web.dev/vitals/
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `includeRawAttribution` | `boolean` | `false` | When true, sets the log record body to the JSON-stringified `web-vitals` attribution object. |
-| `applyCustomLogRecordData` | `(logRecord: LogRecord) => void` | — | Hook to modify log records before they are emitted. |
+| `applyCustomLogRecordData` | `ApplyCustomLogRecordDataFunction` | — | Hook to modify the log record before it is emitted. Receives only `attributes` and `body`. See [Customizing log records](#customizing-log-records). |
 
 ### Console
 
@@ -317,6 +317,37 @@ Each `exception` event includes:
 | `exception.type` | The error's `name` (omitted when the thrown value is a string). |
 | `exception.message` | The error's `message`, or the thrown string itself. |
 | `exception.stacktrace` | The error's `stack` (omitted when the thrown value is a string). |
+
+---
+
+## Customizing log records
+
+The Navigation, Navigation Timing, User Action and Web Vitals instrumentations all accept the same `applyCustomLogRecordData` hook, which runs once per log record just before it is emitted:
+
+```typescript
+import type { ApplyCustomLogRecordDataFunction } from '@opentelemetry/browser-instrumentation/experimental/navigation';
+
+const applyCustomLogRecordData: ApplyCustomLogRecordDataFunction = (
+  logRecord,
+) => {
+  logRecord.attributes = {
+    ...logRecord.attributes,
+    'app.environment': 'production',
+  };
+};
+```
+
+The hook receives only the `attributes` and `body` of the record. The fields that identify the signal, such as the event name, severity, timestamps and context, belong to the instrumentation and cannot be changed: writes to them are ignored, including from untyped JavaScript.
+
+Behavior worth knowing before you rely on it:
+
+- The hook may either mutate `attributes` in place or replace it. If it replaces the object, spread the existing attributes as shown above, otherwise the attributes captured by the instrumentation are dropped from that record.
+- If the hook throws, the error is reported through the [diag logger](https://opentelemetry.io/docs/languages/js/instrumentation/#troubleshooting) and the record is still emitted, carrying whatever the hook set before it threw. A record may therefore be partly modified, so treat a throwing hook as a bug to fix rather than a supported path.
+- If the hook replaces `attributes` with something that is not an object, the change is refused, a warning goes to the diag logger, and the attributes captured by the instrumentation are kept.
+- Async hooks are not supported. An `async` function returns before its body finishes, so anything it changes after its first `await` happens too late and is lost. A warning is written to the diag logger when a hook returns a promise. Do any async work up front and configure the hook with the result, for example through `setConfig`.
+- The hook is read from the current config on every record, so installing or replacing it with `setConfig` after `enable()` takes effect immediately.
+
+Nothing the hook does can break the page: both the hook and the emit that follows it are contained, and failures are reported to the diag logger.
 
 ## Useful links
 
