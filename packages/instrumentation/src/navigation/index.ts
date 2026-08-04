@@ -4,6 +4,7 @@
  */
 export { NavigationInstrumentation } from './instrumentation.ts';
 export type {
+  ApplyCustomLogRecordDataFunction,
   NavigationInstrumentationConfig,
   NavigationType,
 } from './types.ts';

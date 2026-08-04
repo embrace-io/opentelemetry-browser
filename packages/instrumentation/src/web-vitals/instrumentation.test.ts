@@ -244,5 +244,21 @@ describe('WebVitalsInstrumentation', () => {
       expect(inpLog.attributes['custom.page']).toBe('test-page');
       expect(customHook).toHaveBeenCalled();
     });
+
+    it('should pick up a hook installed after construction via setConfig', async () => {
+      const lateHook = vi.fn((logRecord) => {
+        logRecord.attributes['custom.late'] = 'installed-later';
+      });
+
+      instrumentation = new WebVitalsInstrumentation();
+      instrumentation.setConfig({ applyCustomLogRecordData: lateHook });
+
+      createButton('Late hook test');
+      await triggerINP('Late hook test');
+
+      const inpLog = await waitForMetric('inp');
+      expect(inpLog.attributes['custom.late']).toBe('installed-later');
+      expect(lateHook).toHaveBeenCalled();
+    });
   });
 });

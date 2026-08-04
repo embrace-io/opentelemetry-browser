@@ -4,4 +4,7 @@
  */
 
 export { WebVitalsInstrumentation } from './instrumentation.ts';
-export type { WebVitalsInstrumentationConfig } from './types.ts';
+export type {
+  ApplyCustomLogRecordDataFunction,
+  WebVitalsInstrumentationConfig,
+} from './types.ts';

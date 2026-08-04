@@ -4,4 +4,7 @@
  */
 
 export { UserActionInstrumentation } from './instrumentation.ts';
-export type { UserActionInstrumentationConfig } from './types.ts';
+export type {
+  ApplyCustomLogRecordDataFunction,
+  UserActionInstrumentationConfig,
+} from './types.ts';

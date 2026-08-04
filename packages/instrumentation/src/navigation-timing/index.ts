@@ -4,4 +4,7 @@
  */
 
 export { NavigationTimingInstrumentation } from './instrumentation.ts';
-export type { NavigationTimingInstrumentationConfig } from './types.ts';
+export type {
+  ApplyCustomLogRecordDataFunction,
+  NavigationTimingInstrumentationConfig,
+} from './types.ts';

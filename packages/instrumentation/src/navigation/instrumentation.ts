@@ -5,10 +5,8 @@
 
 import type { LogRecord } from '@opentelemetry/api-logs';
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import {
-  InstrumentationBase,
-  safeExecuteInTheMiddle,
-} from '@opentelemetry/instrumentation';
+import { InstrumentationBase } from '@opentelemetry/instrumentation';
+import { emitLogRecord } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import {
   ATTR_BROWSER_NAVIGATION_HASH_CHANGE,
@@ -156,8 +154,12 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
         [ATTR_BROWSER_NAVIGATION_HASH_CHANGE]: false,
       },
     };
-    this._applyCustomLogRecordData(logRecord);
-    this.logger.emit(logRecord);
+    emitLogRecord(
+      this.logger,
+      this._diag,
+      logRecord,
+      cfg.applyCustomLogRecordData,
+    );
   }
 
   private _onSoftNavigation(
@@ -192,8 +194,12 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
         ...(navType ? { [ATTR_BROWSER_NAVIGATION_TYPE]: navType } : {}),
       },
     };
-    this._applyCustomLogRecordData(logRecord);
-    this.logger.emit(logRecord);
+    emitLogRecord(
+      this.logger,
+      this._diag,
+      logRecord,
+      cfg.applyCustomLogRecordData,
+    );
 
     this._lastUrl = currentUrl;
   }
@@ -240,23 +246,6 @@ export class NavigationInstrumentation extends InstrumentationBase<NavigationIns
         return result;
       };
     };
-  }
-
-  private _applyCustomLogRecordData(logRecord: LogRecord): void {
-    const cfg = this.getConfig();
-    const hook = cfg.applyCustomLogRecordData;
-    if (!hook) {
-      return;
-    }
-    safeExecuteInTheMiddle(
-      () => hook(logRecord),
-      (error) => {
-        if (error) {
-          this._diag.error('applyCustomLogRecordData hook failed', error);
-        }
-      },
-      true,
-    );
   }
 
   private _determineSameDocument(fromUrl: string, toUrl: string): boolean {

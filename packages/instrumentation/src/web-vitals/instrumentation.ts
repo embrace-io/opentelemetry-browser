@@ -6,16 +6,14 @@
 import type { Attributes } from '@opentelemetry/api';
 import type { LogRecord } from '@opentelemetry/api-logs';
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import {
-  InstrumentationBase,
-  safeExecuteInTheMiddle,
-} from '@opentelemetry/instrumentation';
+import { InstrumentationBase } from '@opentelemetry/instrumentation';
 import type {
   CLSMetricWithAttribution,
   INPMetricWithAttribution,
   MetricWithAttribution,
 } from 'web-vitals/attribution';
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
+import { emitLogRecord } from '#utils';
 import { version } from '../../package.json' with { type: 'json' };
 import {
   ATTR_WEB_VITAL_DELTA,
@@ -42,13 +40,9 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
   // super() returns, breaking the duplicate-registration guard.
   private declare _isEnabled: boolean;
   private declare _listenersRegistered: boolean;
-  private _applyCustomLogRecordData?: (logRecord: LogRecord) => void;
-  private _includeRawAttribution: boolean;
 
   constructor(config: WebVitalsInstrumentationConfig = {}) {
     super('@opentelemetry/browser-instrumentation/web-vitals', version, config);
-    this._applyCustomLogRecordData = config.applyCustomLogRecordData;
-    this._includeRawAttribution = config.includeRawAttribution ?? false;
   }
 
   protected override init() {
@@ -137,24 +131,17 @@ export class WebVitalsInstrumentation extends InstrumentationBase<WebVitalsInstr
       eventName: WEB_VITAL_EVENT_NAME,
       severityNumber: SeverityNumber.INFO,
       attributes,
-      ...(this._includeRawAttribution
+      ...(this.getConfig().includeRawAttribution
         ? { body: JSON.stringify(metric.attribution) }
         : {}),
       ...(timestamp !== undefined ? { timestamp } : {}),
     };
 
-    if (this._applyCustomLogRecordData) {
-      safeExecuteInTheMiddle(
-        () => this._applyCustomLogRecordData?.(logRecord),
-        (error) => {
-          if (error) {
-            this._diag.error('applyCustomLogRecordData hook failed', error);
-          }
-        },
-        true,
-      );
-    }
-
-    this.logger.emit(logRecord);
+    emitLogRecord(
+      this.logger,
+      this._diag,
+      logRecord,
+      this.getConfig().applyCustomLogRecordData,
+    );
   }
 }
