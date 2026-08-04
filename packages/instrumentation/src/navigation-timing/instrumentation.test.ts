@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { LogRecord } from '@opentelemetry/api-logs';
 import type { InMemoryLogRecordExporter } from '@opentelemetry/sdk-logs';
 import {
   afterEach,
@@ -545,14 +546,18 @@ describe('NavigationTimingInstrumentation', () => {
 
   describe('applyCustomLogRecordData hook', () => {
     it('should allow hook to add custom attributes', () => {
-      const instrumentation = new NavigationTimingInstrumentation({
+      setReadyState('complete');
+
+      const applyCustomLogRecordData = vi.fn((logRecord: LogRecord) => {
+        logRecord.attributes = {
+          ...logRecord.attributes,
+          'custom.attribute': 'custom-value',
+        };
+      });
+
+      instrumentation = new NavigationTimingInstrumentation({
         enabled: false,
-        applyCustomLogRecordData: (logRecord) => {
-          logRecord.attributes = {
-            ...logRecord.attributes,
-            'custom.attribute': 'custom-value',
-          };
-        },
+        applyCustomLogRecordData,
       });
 
       const entry = {
@@ -570,16 +575,32 @@ describe('NavigationTimingInstrumentation', () => {
 
       const logs = getNavigationTimingLogs();
       expect(logs.length).toBe(1);
+      expect(applyCustomLogRecordData).toHaveBeenCalledTimes(1);
       expect(logs[0]?.attributes['custom.attribute']).toBe('custom-value');
+      // The hook replaces `attributes` wholesale, so pin that the built-ins survive.
+      expect(logs[0]?.attributes[ATTR_NAVIGATION_LOAD_EVENT_END]).toBe(456);
     });
 
     it('should catch errors thrown by the hook and still emit', () => {
+      setReadyState('complete');
+
       instrumentation = new NavigationTimingInstrumentation({
         enabled: false,
         applyCustomLogRecordData: () => {
           throw new Error('hook error');
         },
       });
+
+      const diagErrorSpy = vi
+        .spyOn(
+          (
+            instrumentation as unknown as {
+              _diag: { error: (...args: unknown[]) => void };
+            }
+          )._diag,
+          'error',
+        )
+        .mockImplementation(() => {});
 
       const entry = {
         name: 'https://example.test/',
@@ -598,6 +619,8 @@ describe('NavigationTimingInstrumentation', () => {
 
       const logs = getNavigationTimingLogs();
       expect(logs.length).toBe(1);
+      expect(logs[0]?.attributes[ATTR_NAVIGATION_LOAD_EVENT_END]).toBe(456);
+      expect(diagErrorSpy).toHaveBeenCalled();
     });
   });
 });
