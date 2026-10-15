@@ -426,6 +426,41 @@ Management](../../docs/session-management.md) for lifecycle details, the full co
 reference, observing sessions, custom `SessionStore`/`SessionIdGenerator` implementations, and
 known limitations.
 
+## Console exporters
+
+The `@opentelemetry/browser-sdk/exporters` subpath provides `ConsoleSpanExporter` and
+`ConsoleLogRecordExporter`. They print each span or log record to the DevTools console as a
+collapsible group. The group header has a colored badge (log severity or span status) and a short
+message. The full detail is inside the group.
+
+```javascript
+import { startBrowserSdk } from '@opentelemetry/browser-sdk';
+import {
+  ConsoleLogRecordExporter,
+  ConsoleSpanExporter,
+} from '@opentelemetry/browser-sdk/exporters';
+import { SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
+
+startBrowserSdk({
+  serviceName: 'my-service',
+  traces: {
+    processors: [new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() })],
+  },
+  logs: {
+    processors: [
+      // Optional - set `collapsed: false` to show each group expanded. Default is collapsed.
+      new SimpleLogRecordProcessor({
+        exporter: new ConsoleLogRecordExporter({ collapsed: false }),
+      }),
+    ],
+  },
+});
+```
+
+If a span or log record fails to render, the exporter reports the error with `console.error` and
+`diag.error`. The other items in the batch still render, and the export result is always success.
+
 ## Useful links
 
 - For more information on OpenTelemetry, visit: <https://opentelemetry.io/>

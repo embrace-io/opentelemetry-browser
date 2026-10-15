@@ -8,7 +8,9 @@
     "web",
     "sdk",
     "logs",
-    "traces"
+    "traces",
+    "exporter",
+    "console"
   ],
   "homepage": "https://github.com/open-telemetry/opentelemetry-browser",
   "bugs": "https://github.com/open-telemetry/opentelemetry-browser/issues",
@@ -40,6 +42,10 @@
     "./session": {
       "types": "./dist/session/index.d.ts",
       "default": "./dist/session/index.js"
+    },
+    "./exporters": {
+      "types": "./dist/exporters/index.d.ts",
+      "default": "./dist/exporters/index.js"
     },
     "./package.json": "./package.json"
   },

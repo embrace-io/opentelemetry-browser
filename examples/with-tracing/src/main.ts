@@ -7,6 +7,10 @@ import { UserActionInstrumentation } from '@opentelemetry/browser-instrumentatio
 import { WebVitalsInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/web-vitals';
 import { XhrInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/xhr';
 import {
+  ConsoleLogRecordExporter,
+  ConsoleSpanExporter,
+} from '@opentelemetry/browser-sdk/exporters';
+import {
   createDefaultSessionIdGenerator,
   createLocalStorageSessionStore,
   createSessionLogRecordProcessor,
@@ -25,12 +29,10 @@ import {
   resourceFromAttributes,
 } from '@opentelemetry/resources';
 import {
-  ConsoleLogRecordExporter,
   LoggerProvider,
   SimpleLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import {
-  ConsoleSpanExporter,
   SimpleSpanProcessor,
   StackContextManager,
   TracerProvider,

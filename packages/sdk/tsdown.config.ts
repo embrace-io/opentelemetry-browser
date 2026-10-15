@@ -9,5 +9,6 @@ export default defineConfig({
     'traces/index': 'src/traces/index.ts',
     'document/index': 'src/document/index.ts',
     'session/index': 'src/session/index.ts',
+    'exporters/index': 'src/exporters/index.ts',
   },
 });

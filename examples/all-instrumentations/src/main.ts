@@ -5,6 +5,7 @@ import { NavigationTimingInstrumentation } from '@opentelemetry/browser-instrume
 import { ResourceTimingInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/resource-timing';
 import { UserActionInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/user-action';
 import { WebVitalsInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/web-vitals';
+import { ConsoleLogRecordExporter } from '@opentelemetry/browser-sdk/exporters';
 import {
   createDefaultSessionIdGenerator,
   createLocalStorageSessionStore,
@@ -13,7 +14,6 @@ import {
 } from '@opentelemetry/browser-sdk/session';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import {
-  ConsoleLogRecordExporter,
   LoggerProvider,
   SimpleLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';

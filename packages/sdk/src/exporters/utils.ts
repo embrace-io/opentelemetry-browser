@@ -1,0 +1,175 @@
+/*
+ * Copyright The OpenTelemetry Authors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { diag, SpanStatusCode } from '@opentelemetry/api';
+import { SeverityNumber } from '@opentelemetry/api-logs';
+import { hrTimeToMilliseconds } from '@opentelemetry/core';
+import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
+import type { BadgeLevel, ConsoleExporterConfig } from './types.ts';
+
+/** Badge background colors per level. */
+export const BADGE_COLORS: Readonly<Record<BadgeLevel, string>> = {
+  trace: '#6b7280',
+  debug: '#6b7280',
+  info: '#0891b2',
+  warn: '#d97706',
+  error: '#dc2626',
+  ok: '#16a34a',
+};
+
+/** Map a log record's SeverityNumber to a visual level. */
+export function levelForSeverity(severity?: SeverityNumber): BadgeLevel {
+  if (severity === undefined || severity <= SeverityNumber.UNSPECIFIED) {
+    return 'info';
+  }
+  if (severity <= SeverityNumber.TRACE4) {
+    return 'trace';
+  }
+  if (severity <= SeverityNumber.DEBUG4) {
+    return 'debug';
+  }
+  if (severity <= SeverityNumber.INFO4) {
+    return 'info';
+  }
+  if (severity <= SeverityNumber.WARN4) {
+    return 'warn';
+  }
+  return 'error';
+}
+
+/** Map a span status code to a visual level. */
+export function levelForStatus(code: SpanStatusCode): BadgeLevel {
+  return code === SpanStatusCode.ERROR ? 'error' : 'ok';
+}
+
+const HEADER_STYLE_RESET = 'color:inherit;font-weight:normal';
+
+function badgeStyle(color: string): string {
+  return `background:${color};color:#fff;border-radius:3px;padding:1px 4px;font-weight:600`;
+}
+
+function renderGroup(
+  scope: string,
+  level: BadgeLevel,
+  badgeLabel: string,
+  message: string,
+  detail: Record<string, unknown>,
+  config: ConsoleExporterConfig,
+): void {
+  const color = BADGE_COLORS[level];
+  const header = `%c ${scope} · ${badgeLabel} %c ${message}`;
+  const styleArgs = [badgeStyle(color), HEADER_STYLE_RESET];
+
+  if (config.collapsed === false) {
+    console.group(header, ...styleArgs);
+  } else {
+    console.groupCollapsed(header, ...styleArgs);
+  }
+  // Close the group even if rendering the detail throws, so the failure
+  // cannot nest all later console output.
+  try {
+    console.dir(detail);
+  } finally {
+    console.groupEnd();
+  }
+}
+
+/** Render a single span as a styled console group. */
+export function renderSpan(
+  span: ReadableSpan,
+  config: ConsoleExporterConfig,
+): void {
+  const ctx = span.spanContext();
+  const level = levelForStatus(span.status.code);
+  const badgeLabel = level === 'error' ? 'SPAN ERR' : 'SPAN';
+  const durationMs = Math.round(hrTimeToMilliseconds(span.duration));
+
+  renderGroup(
+    span.instrumentationScope.name,
+    level,
+    badgeLabel,
+    `${span.name}  ${durationMs}ms`,
+    {
+      traceId: ctx.traceId,
+      spanId: ctx.spanId,
+      parentSpanId: span.parentSpanContext?.spanId,
+      name: span.name,
+      kind: span.kind,
+      startTime: new Date(hrTimeToMilliseconds(span.startTime)).toISOString(),
+      durationMs,
+      status: span.status,
+      attributes: span.attributes,
+      events: span.events,
+      links: span.links,
+    },
+    config,
+  );
+}
+
+/** Render a log body as a header string, with fallbacks when it is not serializable. */
+export function stringifyBody(body: unknown): string {
+  if (typeof body === 'string') {
+    return body;
+  }
+  try {
+    return JSON.stringify(body) ?? String(body);
+  } catch {
+    try {
+      return String(body);
+    } catch {
+      // A null-prototype object has no toString, so String() throws too. A
+      // bad header preview must not cost the whole record its console.dir.
+      return '[unserializable body]';
+    }
+  }
+}
+
+/** Render a single log record as a styled console group. */
+export function renderLog(
+  log: ReadableLogRecord,
+  config: ConsoleExporterConfig,
+): void {
+  const level = levelForSeverity(log.severityNumber);
+  const badgeLabel = log.severityText ?? level.toUpperCase();
+
+  renderGroup(
+    log.instrumentationScope.name,
+    level,
+    badgeLabel,
+    stringifyBody(log.body),
+    {
+      severityText: log.severityText,
+      severityNumber: log.severityNumber,
+      body: log.body,
+      timestamp: new Date(hrTimeToMilliseconds(log.hrTime)).toISOString(),
+      attributes: log.attributes,
+      traceId: log.spanContext?.traceId,
+      spanId: log.spanContext?.spanId,
+    },
+    config,
+  );
+}
+
+/**
+ * Report a failed render without ever throwing. console.error comes first
+ * because diag is a no-op unless the app registered a logger.
+ */
+export function reportRenderFailure(
+  message: string,
+  item: unknown,
+  err: unknown,
+): void {
+  try {
+    console.error(message, item, err);
+  } catch {
+    // The console itself is broken; there is nowhere left to report.
+  }
+  try {
+    diag.error(message, item, err);
+  } catch {
+    // A throwing DiagLogger must not break the export pipeline.
+  }
+}
