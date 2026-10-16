@@ -10,50 +10,30 @@ import type {
   ReadableLogRecord,
 } from '@opentelemetry/sdk-logs';
 import type { ConsoleExporterConfig } from './types.ts';
-import { exportBatch, renderLog } from './utils.ts';
+import { renderLog } from './utils.ts';
 
 /**
- * A LogRecordExporter that prints each log record to the browser console as a
- * styled, collapsible group with a severity badge.
- *
- * A record that fails to render is reported with `console.error` and
- * `diag.error`, and the rest of the batch still renders. The batch result is
- * then FAILED.
+ * A LogRecordExporter that prints each log record to the browser console as
+ * a group with a colored severity badge.
  */
 export class ConsoleLogRecordExporter implements LogRecordExporter {
   private readonly _collapsed: boolean;
-  private _isShutdown = false;
 
-  /**
-   * @param config Options for the console output. They are read once, so
-   * later changes to the object have no effect.
-   */
   constructor(config: ConsoleExporterConfig = {}) {
-    this._collapsed = config.collapsed !== false;
+    this._collapsed = config.collapsed ?? true;
   }
 
   export(
     logs: ReadableLogRecord[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    if (this._isShutdown) {
-      resultCallback({
-        code: ExportResultCode.FAILED,
-        error: new Error('ConsoleLogRecordExporter is shut down'),
-      });
-      return;
+    for (const log of logs) {
+      renderLog(log, this._collapsed);
     }
-    exportBatch(
-      logs,
-      (log) => renderLog(log, this._collapsed),
-      'ConsoleLogRecordExporter',
-      'log record',
-      resultCallback,
-    );
+    resultCallback({ code: ExportResultCode.SUCCESS });
   }
 
   shutdown(): Promise<void> {
-    this._isShutdown = true;
     return Promise.resolve();
   }
 

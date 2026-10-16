@@ -431,8 +431,8 @@ known limitations.
 The `@opentelemetry/browser-sdk/exporters` subpath provides `ConsoleSpanExporter` and
 `ConsoleLogRecordExporter`. They print each span or log record to the DevTools console as a
 collapsible group. The group header has a colored badge with the instrumentation scope name and the
-log severity or span status. After the badge comes the span name and duration, or the log body. A
-long log body is cut to 200 characters in the header. The full detail is inside the group.
+log severity, or `SPAN` / `SPAN ERR` for spans. After the badge comes the span name and duration, or
+the log body if it is a string. The full detail is inside the group.
 
 These exporters have the same names as the console exporters in `@opentelemetry/sdk-trace` and
 `@opentelemetry/sdk-logs`. They are a different implementation: they use styled, collapsible groups
@@ -463,10 +463,10 @@ startBrowserSdk({
 });
 ```
 
-If a span or log record fails to render, the exporter reports the error with `console.error` and
-`diag.error`. The other items in the batch still render, but the export result for the batch is
-failure, as the OpenTelemetry specification requires. After `shutdown()`, the exporters print
-nothing and the export result is failure.
+The exporters write to the console of a hidden iframe, not to the page console. Their output shows
+in the same DevTools console, but tools that patch `window.console` (such as the console
+instrumentation) do not see it. So the exporters cannot create new log records from their own
+output. Where there is no DOM, such as in Web Workers, the exporters use the global console.
 
 ## Useful links
 

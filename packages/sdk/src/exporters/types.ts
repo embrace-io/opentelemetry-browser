@@ -6,9 +6,9 @@
 /** Options shared by both browser console exporters. */
 export interface ConsoleExporterConfig {
   /**
-   * Controls whether each signal's group starts collapsed. Only an explicit
-   * `false` expands the group via `console.group`; `true` or unset uses
-   * `console.groupCollapsed`.
+   * Start each group collapsed (`console.groupCollapsed`). Set to `false` to
+   * use `console.group`.
+   * @defaultValue true
    */
-  readonly collapsed?: boolean;
+  collapsed?: boolean;
 }
