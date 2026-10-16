@@ -10,47 +10,50 @@ import type {
   ReadableLogRecord,
 } from '@opentelemetry/sdk-logs';
 import type { ConsoleExporterConfig } from './types.ts';
-import { renderLog, reportRenderFailure } from './utils.ts';
+import { exportBatch, renderLog } from './utils.ts';
 
 /**
  * A LogRecordExporter that prints each log record to the browser console as a
  * styled, collapsible group with a severity badge.
  *
  * A record that fails to render is reported with `console.error` and
- * `diag.error`, and the rest of the batch still renders.
+ * `diag.error`, and the rest of the batch still renders. The batch result is
+ * then FAILED.
  */
 export class ConsoleLogRecordExporter implements LogRecordExporter {
-  private readonly _config: ConsoleExporterConfig;
+  private readonly _collapsed: boolean;
+  private _isShutdown = false;
 
   /**
-   * @param config Options for the console output. The object is copied, so
-   * later changes to it have no effect.
+   * @param config Options for the console output. They are read once, so
+   * later changes to the object have no effect.
    */
   constructor(config: ConsoleExporterConfig = {}) {
-    this._config = { ...config };
+    this._collapsed = config.collapsed !== false;
   }
 
   export(
     logs: ReadableLogRecord[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    for (const log of logs) {
-      try {
-        renderLog(log, this._config);
-      } catch (err) {
-        reportRenderFailure(
-          'ConsoleLogRecordExporter failed to render a log record',
-          log,
-          err,
-        );
-      }
+    if (this._isShutdown) {
+      resultCallback({
+        code: ExportResultCode.FAILED,
+        error: new Error('ConsoleLogRecordExporter is shut down'),
+      });
+      return;
     }
-    // A render failure is cosmetic. FAILED would only raise a spurious error
-    // through the global error handler, because processors never retry a batch.
-    resultCallback({ code: ExportResultCode.SUCCESS });
+    exportBatch(
+      logs,
+      (log) => renderLog(log, this._collapsed),
+      'ConsoleLogRecordExporter',
+      'log record',
+      resultCallback,
+    );
   }
 
   shutdown(): Promise<void> {
+    this._isShutdown = true;
     return Promise.resolve();
   }
 

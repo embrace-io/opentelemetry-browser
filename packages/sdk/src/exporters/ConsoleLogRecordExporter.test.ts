@@ -8,6 +8,10 @@ import { diag } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
+import {
+  LoggerProvider,
+  SimpleLogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
 import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleLogRecordExporter } from './ConsoleLogRecordExporter.ts';
@@ -31,6 +35,16 @@ function fakeLog(
     ...overrides,
   } as unknown as ReadableLogRecord;
 }
+
+function headerOf(call: unknown[] | undefined) {
+  const [format, badgeStyle, scope, label, resetStyle, message] = call ?? [];
+  return { format, badgeStyle, scope, label, resetStyle, message };
+}
+
+const FAILED = {
+  code: ExportResultCode.FAILED,
+  error: expect.any(Error),
+};
 
 describe('ConsoleLogRecordExporter', () => {
   let group: MockInstance;
@@ -58,18 +72,19 @@ describe('ConsoleLogRecordExporter', () => {
     exporter.export([fakeLog()], callback);
 
     expect(groupCollapsed).toHaveBeenCalledTimes(1);
-    const call = groupCollapsed.mock.calls[0];
-    expect(call).toBeDefined();
-    const header = call?.[0];
-    const badgeStyle = call?.[1];
-    expect(header).toContain('%c console · INFO %c');
-    expect(header).toContain('user clicked button');
-    expect(badgeStyle).toContain(BADGE_COLORS.info);
+    const header = headerOf(groupCollapsed.mock.calls[0]);
+    expect(header.format).toBe('%c %s · %s %c %s');
+    expect(header.badgeStyle).toContain(BADGE_COLORS.info);
+    expect(header.scope).toBe('console');
+    expect(header.label).toBe('INFO');
+    expect(header.message).toBe('user clicked button');
 
-    const detail = dir.mock.calls[0]?.[0];
-    expect(detail).toMatchObject({
+    expect(dir.mock.calls[0]?.[0]).toEqual({
       severityText: 'INFO',
+      severityNumber: SeverityNumber.INFO,
       body: 'user clicked button',
+      timestamp: '2023-11-14T22:13:20.000Z',
+      attributes: { 'console.method': 'log' },
       traceId: 'tid',
       spanId: 'sid',
     });
@@ -88,23 +103,67 @@ describe('ConsoleLogRecordExporter', () => {
       ],
       vi.fn(),
     );
-    const call = groupCollapsed.mock.calls[0];
-    expect(call?.[0]).toContain('console · ERROR');
-    expect(call?.[1]).toContain(BADGE_COLORS.error);
+    const header = headerOf(groupCollapsed.mock.calls[0]);
+    expect(header.label).toBe('ERROR');
+    expect(header.badgeStyle).toContain(BADGE_COLORS.error);
   });
 
-  it('derives a badge label from severity when severityText is absent', () => {
+  it.each([
+    ['absent', undefined],
+    ['empty', ''],
+  ])(
+    'derives a badge label from severity when severityText is %s',
+    (_, severityText) => {
+      const exporter = new ConsoleLogRecordExporter();
+      exporter.export(
+        [fakeLog({ severityText, severityNumber: SeverityNumber.WARN })],
+        vi.fn(),
+      );
+      expect(headerOf(groupCollapsed.mock.calls[0]).label).toBe('WARN');
+    },
+  );
+
+  it('passes a "%" in severityText as a value, not as part of the format', () => {
     const exporter = new ConsoleLogRecordExporter();
+    exporter.export([fakeLog({ severityText: '%c%s' })], vi.fn());
+
+    const header = headerOf(groupCollapsed.mock.calls[0]);
+    expect(header.format).toBe('%c %s · %s %c %s');
+    expect(header.label).toBe('%c%s');
+  });
+
+  it('shows an Error body as "name: message" in the header', () => {
+    const exporter = new ConsoleLogRecordExporter();
+    const body = new TypeError('bad input');
     exporter.export(
-      [
-        fakeLog({
-          severityText: undefined,
-          severityNumber: SeverityNumber.WARN,
-        }),
-      ],
+      [fakeLog({ body: body as unknown as ReadableLogRecord['body'] })],
       vi.fn(),
     );
-    expect(groupCollapsed.mock.calls[0]?.[0]).toContain('console · WARN');
+
+    expect(headerOf(groupCollapsed.mock.calls[0]).message).toBe(
+      'TypeError: bad input',
+    );
+    expect(dir.mock.calls[0]?.[0].body).toBe(body);
+  });
+
+  it('renders a record with an invalid timestamp instead of dropping it', () => {
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    exporter.export([fakeLog({ hrTime: [Number.NaN, 0] })], callback);
+
+    expect(dir.mock.calls[0]?.[0]).toMatchObject({ timestamp: 'invalid time' });
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+  });
+
+  it('renders a record without a span context', () => {
+    const exporter = new ConsoleLogRecordExporter();
+    exporter.export([fakeLog({ spanContext: undefined })], vi.fn());
+
+    expect(dir.mock.calls[0]?.[0]).toMatchObject({
+      traceId: undefined,
+      spanId: undefined,
+    });
   });
 
   it('uses console.group (not collapsed) when collapsed is false', () => {
@@ -115,19 +174,6 @@ describe('ConsoleLogRecordExporter', () => {
     expect(groupCollapsed).not.toHaveBeenCalled();
   });
 
-  it('still reports SUCCESS and reports the error via diag when rendering throws', () => {
-    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
-    groupCollapsed.mockImplementation(() => {
-      throw new Error('boom');
-    });
-    const exporter = new ConsoleLogRecordExporter();
-    const callback = vi.fn();
-
-    expect(() => exporter.export([fakeLog()], callback)).not.toThrow();
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
-    expect(diagError).toHaveBeenCalledTimes(1);
-  });
-
   it('collapses when collapsed is explicitly true, same as unset', () => {
     const exporter = new ConsoleLogRecordExporter({ collapsed: true });
     exporter.export([fakeLog()], vi.fn());
@@ -136,7 +182,7 @@ describe('ConsoleLogRecordExporter', () => {
     expect(group).not.toHaveBeenCalled();
   });
 
-  it('snapshots the config so later mutation does not change behavior', () => {
+  it('reads the config once so later mutation does not change behavior', () => {
     const config = { collapsed: false };
     const exporter = new ConsoleLogRecordExporter(config);
     config.collapsed = true;
@@ -147,6 +193,23 @@ describe('ConsoleLogRecordExporter', () => {
     expect(groupCollapsed).not.toHaveBeenCalled();
   });
 
+  it('reports FAILED and the error via diag when rendering throws', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
+    groupCollapsed.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    expect(() => exporter.export([fakeLog()], callback)).not.toThrow();
+    expect(callback).toHaveBeenCalledWith(FAILED);
+    expect(callback.mock.calls[0]?.[0].error.message).toBe(
+      'ConsoleLogRecordExporter failed to render 1 of 1 log records',
+    );
+    expect(diagError).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a render failure via console.error even when no diag logger is registered', () => {
     const consoleError = vi
       .spyOn(console, 'error')
@@ -155,17 +218,15 @@ describe('ConsoleLogRecordExporter', () => {
       throw new Error('boom');
     });
     const exporter = new ConsoleLogRecordExporter();
-    const callback = vi.fn();
     const log = fakeLog();
 
-    exporter.export([log], callback);
+    exporter.export([log], vi.fn());
 
     expect(consoleError).toHaveBeenCalledTimes(1);
     expect(consoleError.mock.calls[0]).toContain(log);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 
-  it('still invokes the callback when the registered diag logger throws', () => {
+  it('still invokes the callback once when the registered diag logger throws', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(diag, 'error').mockImplementation(() => {
       throw new Error('diag logger is broken');
@@ -178,11 +239,28 @@ describe('ConsoleLogRecordExporter', () => {
 
     expect(() => exporter.export([fakeLog()], callback)).not.toThrow();
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(callback).toHaveBeenCalledWith(FAILED);
+  });
+
+  it('still reports via diag when console.error throws', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {
+      throw new Error('console is broken');
+    });
+    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
+    groupCollapsed.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    expect(() => exporter.export([fakeLog()], callback)).not.toThrow();
+    expect(diagError).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(FAILED);
   });
 
   it('closes the group when console.dir throws so later output is not nested', () => {
-    vi.spyOn(diag, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     dir.mockImplementation(() => {
       throw new Error('boom');
     });
@@ -191,10 +269,11 @@ describe('ConsoleLogRecordExporter', () => {
 
     expect(() => exporter.export([fakeLog()], callback)).not.toThrow();
     expect(groupEnd).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(callback).toHaveBeenCalledWith(FAILED);
   });
 
   it('isolates a failing log record and still renders the rest of the batch', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementationOnce(() => {
       throw new Error('boom');
@@ -204,12 +283,13 @@ describe('ConsoleLogRecordExporter', () => {
 
     exporter.export([fakeLog(), fakeLog({ body: 'second message' })], callback);
 
-    // First record threw and was reported; the second still rendered.
     expect(diagError).toHaveBeenCalledTimes(1);
     expect(groupCollapsed).toHaveBeenCalledTimes(2);
-    expect(groupCollapsed.mock.calls[1]?.[0]).toContain('second message');
+    expect(headerOf(groupCollapsed.mock.calls[1]).message).toBe(
+      'second message',
+    );
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(callback).toHaveBeenCalledWith(FAILED);
   });
 
   it('reports SUCCESS exactly once for an empty batch', () => {
@@ -223,50 +303,118 @@ describe('ConsoleLogRecordExporter', () => {
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 
-  it('does not throw and still reports SUCCESS on a circular body', () => {
-    const circular: Record<string, unknown> = {};
+  it('marks a circular body in the header and reports SUCCESS', () => {
+    const circular: Record<string, unknown> = { a: 1 };
     circular['self'] = circular;
     const exporter = new ConsoleLogRecordExporter();
     const callback = vi.fn();
 
-    expect(() =>
-      exporter.export(
-        [fakeLog({ body: circular as unknown as ReadableLogRecord['body'] })],
-        callback,
-      ),
-    ).not.toThrow();
+    exporter.export(
+      [fakeLog({ body: circular as unknown as ReadableLogRecord['body'] })],
+      callback,
+    );
+
+    expect(headerOf(groupCollapsed.mock.calls[0]).message).toBe(
+      '{"a":1,"self":"[Circular]"}',
+    );
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
-    expect(groupCollapsed).toHaveBeenCalledTimes(1);
-    expect(groupCollapsed.mock.calls[0]?.[0]).toContain('[object Object]');
   });
 
-  it('isolates a structurally malformed log record and still renders the rest of the batch', () => {
+  it('isolates a structurally malformed log record, renders the rest, and reports FAILED', () => {
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
     const exporter = new ConsoleLogRecordExporter();
     const callback = vi.fn();
+    const malformed = fakeLog({
+      instrumentationScope:
+        undefined as unknown as ReadableLogRecord['instrumentationScope'],
+    });
 
     exporter.export(
-      [
-        fakeLog({
-          instrumentationScope:
-            undefined as unknown as ReadableLogRecord['instrumentationScope'],
-        }),
-        fakeLog({ body: 'healthy message' }),
-      ],
+      [malformed, fakeLog({ body: 'healthy message' })],
       callback,
     );
 
     expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls[0]).toContain(malformed);
     expect(groupCollapsed).toHaveBeenCalledTimes(1);
-    expect(groupCollapsed.mock.calls[0]?.[0]).toContain('healthy message');
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(headerOf(groupCollapsed.mock.calls[0]).message).toBe(
+      'healthy message',
+    );
+    expect(callback).toHaveBeenCalledWith(FAILED);
   });
 
   it('resolves shutdown and forceFlush', async () => {
     const exporter = new ConsoleLogRecordExporter();
     await expect(exporter.shutdown()).resolves.toBeUndefined();
     await expect(exporter.forceFlush()).resolves.toBeUndefined();
+  });
+
+  it('prints nothing and reports FAILED after shutdown', async () => {
+    const exporter = new ConsoleLogRecordExporter();
+    const callback = vi.fn();
+
+    await exporter.shutdown();
+    exporter.export([fakeLog()], callback);
+
+    expect(groupCollapsed).not.toHaveBeenCalled();
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(FAILED);
+  });
+
+  it('renders a log record produced by a real LoggerProvider', async () => {
+    const provider = new LoggerProvider({
+      processors: [
+        new SimpleLogRecordProcessor({
+          exporter: new ConsoleLogRecordExporter(),
+        }),
+      ],
+    });
+
+    provider.getLogger('smoke-test').emit({
+      body: 'hello',
+      severityNumber: SeverityNumber.WARN,
+      severityText: 'WARN',
+      attributes: { 'app.key': 'value' },
+    });
+    await provider.forceFlush();
+
+    const header = headerOf(groupCollapsed.mock.calls[0]);
+    expect(header.scope).toBe('smoke-test');
+    expect(header.label).toBe('WARN');
+    expect(header.message).toBe('hello');
+    expect(dir.mock.calls[0]?.[0]).toMatchObject({
+      attributes: { 'app.key': 'value' },
+      timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+    await provider.shutdown();
+  });
+
+  it('does not recurse when a console wrapper turns its failure report into a new log record', async () => {
+    const provider = new LoggerProvider({
+      processors: [
+        new SimpleLogRecordProcessor({
+          exporter: new ConsoleLogRecordExporter(),
+        }),
+      ],
+    });
+    const logger = provider.getLogger('console');
+    // Acts like ConsoleInstrumentation: each console.error call emits a record.
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation((...args: unknown[]) => {
+        logger.emit({ body: String(args[0]) });
+      });
+    dir.mockImplementation(() => {
+      throw new Error('console.dir is broken');
+    });
+
+    logger.emit({ body: 'first' });
+    await provider.forceFlush();
+
+    expect(dir).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    await provider.shutdown();
   });
 });

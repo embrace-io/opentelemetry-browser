@@ -7,47 +7,50 @@ import type { ExportResult } from '@opentelemetry/core';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 import type { ConsoleExporterConfig } from './types.ts';
-import { renderSpan, reportRenderFailure } from './utils.ts';
+import { exportBatch, renderSpan } from './utils.ts';
 
 /**
  * A SpanExporter that prints each span to the browser console as a styled,
  * collapsible group with a status badge and its duration.
  *
  * A span that fails to render is reported with `console.error` and
- * `diag.error`, and the rest of the batch still renders.
+ * `diag.error`, and the rest of the batch still renders. The batch result is
+ * then FAILED.
  */
 export class ConsoleSpanExporter implements SpanExporter {
-  private readonly _config: ConsoleExporterConfig;
+  private readonly _collapsed: boolean;
+  private _isShutdown = false;
 
   /**
-   * @param config Options for the console output. The object is copied, so
-   * later changes to it have no effect.
+   * @param config Options for the console output. They are read once, so
+   * later changes to the object have no effect.
    */
   constructor(config: ConsoleExporterConfig = {}) {
-    this._config = { ...config };
+    this._collapsed = config.collapsed !== false;
   }
 
   export(
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    for (const span of spans) {
-      try {
-        renderSpan(span, this._config);
-      } catch (err) {
-        reportRenderFailure(
-          'ConsoleSpanExporter failed to render a span',
-          span,
-          err,
-        );
-      }
+    if (this._isShutdown) {
+      resultCallback({
+        code: ExportResultCode.FAILED,
+        error: new Error('ConsoleSpanExporter is shut down'),
+      });
+      return;
     }
-    // A render failure is cosmetic. FAILED would only raise a spurious error
-    // through the global error handler, because processors never retry a batch.
-    resultCallback({ code: ExportResultCode.SUCCESS });
+    exportBatch(
+      spans,
+      (span) => renderSpan(span, this._collapsed),
+      'ConsoleSpanExporter',
+      'span',
+      resultCallback,
+    );
   }
 
   shutdown(): Promise<void> {
+    this._isShutdown = true;
     return Promise.resolve();
   }
 

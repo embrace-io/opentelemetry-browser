@@ -4,9 +4,16 @@
  */
 
 import type { HrTime } from '@opentelemetry/api';
-import { diag, SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import {
+  context,
+  diag,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace';
+import { SimpleSpanProcessor, TracerProvider } from '@opentelemetry/sdk-trace';
 import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleSpanExporter } from './ConsoleSpanExporter.ts';
@@ -39,6 +46,16 @@ function fakeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
   } as unknown as ReadableSpan;
 }
 
+function headerOf(call: unknown[] | undefined) {
+  const [format, badgeStyle, scope, label, resetStyle, message] = call ?? [];
+  return { format, badgeStyle, scope, label, resetStyle, message };
+}
+
+const FAILED = {
+  code: ExportResultCode.FAILED,
+  error: expect.any(Error),
+};
+
 describe('ConsoleSpanExporter', () => {
   let groupCollapsed: MockInstance;
   let group: MockInstance;
@@ -65,20 +82,27 @@ describe('ConsoleSpanExporter', () => {
     exporter.export([fakeSpan()], callback);
 
     expect(groupCollapsed).toHaveBeenCalledTimes(1);
-    const [header, badgeStyle] = groupCollapsed.mock.calls[0] ?? [];
-    expect(header).toContain('%c user-action · SPAN %c');
-    expect(header).toContain('checkout.submit');
-    expect(header).toContain('142ms');
-    expect(badgeStyle).toContain(BADGE_COLORS.ok);
+    const header = headerOf(groupCollapsed.mock.calls[0]);
+    expect(header.format).toBe('%c %s · %s %c %s');
+    expect(header.badgeStyle).toContain(BADGE_COLORS.ok);
+    expect(header.scope).toBe('user-action');
+    expect(header.label).toBe('SPAN');
+    expect(header.resetStyle).toContain('color:inherit');
+    expect(header.message).toBe('checkout.submit  142ms');
 
     expect(dir).toHaveBeenCalledTimes(1);
-    const detail = dir.mock.calls[0]?.[0];
-    expect(detail).toMatchObject({
+    expect(dir.mock.calls[0]?.[0]).toEqual({
       traceId: 'tid',
       spanId: 'sid',
       parentSpanId: 'psid',
       name: 'checkout.submit',
+      kind: SpanKind.INTERNAL,
+      startTime: '2023-11-14T22:13:20.000Z',
       durationMs: 142,
+      status: { code: SpanStatusCode.OK },
+      attributes: { 'http.method': 'POST' },
+      events: [],
+      links: [],
     });
 
     expect(groupEnd).toHaveBeenCalledTimes(1);
@@ -92,9 +116,40 @@ describe('ConsoleSpanExporter', () => {
       vi.fn(),
     );
 
-    const [header, badgeStyle] = groupCollapsed.mock.calls[0] ?? [];
-    expect(header).toContain('user-action · SPAN ERR');
-    expect(badgeStyle).toContain(BADGE_COLORS.error);
+    const header = headerOf(groupCollapsed.mock.calls[0]);
+    expect(header.label).toBe('SPAN ERR');
+    expect(header.badgeStyle).toContain(BADGE_COLORS.error);
+  });
+
+  it('passes a "%" in the scope name as a value, not as part of the format', () => {
+    const exporter = new ConsoleSpanExporter();
+    exporter.export(
+      [fakeSpan({ instrumentationScope: { name: 'scope %c %s' } })],
+      vi.fn(),
+    );
+
+    const header = headerOf(groupCollapsed.mock.calls[0]);
+    expect(header.format).toBe('%c %s · %s %c %s');
+    expect(header.scope).toBe('scope %c %s');
+  });
+
+  it('rounds the duration to whole milliseconds', () => {
+    const exporter = new ConsoleSpanExporter();
+    exporter.export([fakeSpan({ duration: [0, 142_500_000] })], vi.fn());
+
+    expect(headerOf(groupCollapsed.mock.calls[0]).message).toBe(
+      'checkout.submit  143ms',
+    );
+  });
+
+  it('renders a span with an invalid start time instead of dropping it', () => {
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    exporter.export([fakeSpan({ startTime: [Number.NaN, 0] })], callback);
+
+    expect(dir.mock.calls[0]?.[0]).toMatchObject({ startTime: 'invalid time' });
+    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 
   it('uses console.group (not collapsed) when collapsed is false', () => {
@@ -113,7 +168,7 @@ describe('ConsoleSpanExporter', () => {
     expect(group).not.toHaveBeenCalled();
   });
 
-  it('snapshots the config so later mutation does not change behavior', () => {
+  it('reads the config once so later mutation does not change behavior', () => {
     const config = { collapsed: false };
     const exporter = new ConsoleSpanExporter(config);
     config.collapsed = true;
@@ -124,53 +179,56 @@ describe('ConsoleSpanExporter', () => {
     expect(groupCollapsed).not.toHaveBeenCalled();
   });
 
-  it('does not throw and still reports SUCCESS on a circular attribute value', () => {
+  it('passes a circular attribute value to console.dir unchanged', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     const circular: Record<string, unknown> = {};
     circular['self'] = circular;
     const exporter = new ConsoleSpanExporter();
     const callback = vi.fn();
 
-    expect(() =>
-      exporter.export(
-        [
-          fakeSpan({
-            attributes: circular as unknown as ReadableSpan['attributes'],
-          }),
-        ],
-        callback,
-      ),
-    ).not.toThrow();
+    exporter.export(
+      [
+        fakeSpan({
+          attributes: circular as unknown as ReadableSpan['attributes'],
+        }),
+      ],
+      callback,
+    );
+
+    expect(dir.mock.calls[0]?.[0].attributes).toBe(circular);
+    expect(consoleError).not.toHaveBeenCalled();
     expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 
-  it('isolates a structurally malformed span and still renders the rest of the batch', () => {
+  it('isolates a structurally malformed span, renders the rest, and reports FAILED', () => {
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
     const exporter = new ConsoleSpanExporter();
     const callback = vi.fn();
+    const malformed = fakeSpan({
+      status: undefined as unknown as ReadableSpan['status'],
+    });
 
-    exporter.export(
-      [
-        fakeSpan({ status: undefined as unknown as ReadableSpan['status'] }),
-        fakeSpan({ name: 'healthy.span' }),
-      ],
-      callback,
-    );
+    exporter.export([malformed, fakeSpan({ name: 'healthy.span' })], callback);
 
     expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls[0]).toContain(malformed);
     expect(groupCollapsed).toHaveBeenCalledTimes(1);
-    expect(groupCollapsed.mock.calls[0]?.[0]).toContain('healthy.span');
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(headerOf(groupCollapsed.mock.calls[0]).message).toContain(
+      'healthy.span',
+    );
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(FAILED);
+    expect(callback.mock.calls[0]?.[0].error.message).toBe(
+      'ConsoleSpanExporter failed to render 1 of 2 spans',
+    );
   });
 
-  it('resolves shutdown and forceFlush', async () => {
-    const exporter = new ConsoleSpanExporter();
-    await expect(exporter.shutdown()).resolves.toBeUndefined();
-    await expect(exporter.forceFlush()).resolves.toBeUndefined();
-  });
-
-  it('still reports SUCCESS and reports the error via diag when rendering throws', () => {
+  it('reports FAILED and the error via diag when rendering throws', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementation(() => {
       throw new Error('boom');
@@ -179,7 +237,7 @@ describe('ConsoleSpanExporter', () => {
     const callback = vi.fn();
 
     expect(() => exporter.export([fakeSpan()], callback)).not.toThrow();
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(callback).toHaveBeenCalledWith(FAILED);
     expect(diagError).toHaveBeenCalledTimes(1);
   });
 
@@ -191,17 +249,15 @@ describe('ConsoleSpanExporter', () => {
       throw new Error('boom');
     });
     const exporter = new ConsoleSpanExporter();
-    const callback = vi.fn();
     const span = fakeSpan();
 
-    exporter.export([span], callback);
+    exporter.export([span], vi.fn());
 
     expect(consoleError).toHaveBeenCalledTimes(1);
     expect(consoleError.mock.calls[0]).toContain(span);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
   });
 
-  it('still invokes the callback when the registered diag logger throws', () => {
+  it('still invokes the callback once when the registered diag logger throws', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(diag, 'error').mockImplementation(() => {
       throw new Error('diag logger is broken');
@@ -214,11 +270,28 @@ describe('ConsoleSpanExporter', () => {
 
     expect(() => exporter.export([fakeSpan()], callback)).not.toThrow();
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(callback).toHaveBeenCalledWith(FAILED);
+  });
+
+  it('still reports via diag when console.error throws', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {
+      throw new Error('console is broken');
+    });
+    const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
+    groupCollapsed.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    expect(() => exporter.export([fakeSpan()], callback)).not.toThrow();
+    expect(diagError).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(FAILED);
   });
 
   it('closes the group when console.dir throws so later output is not nested', () => {
-    vi.spyOn(diag, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     dir.mockImplementation(() => {
       throw new Error('boom');
     });
@@ -227,10 +300,11 @@ describe('ConsoleSpanExporter', () => {
 
     expect(() => exporter.export([fakeSpan()], callback)).not.toThrow();
     expect(groupEnd).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(callback).toHaveBeenCalledWith(FAILED);
   });
 
   it('isolates a failing span and still renders the rest of the batch', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const diagError = vi.spyOn(diag, 'error').mockImplementation(() => {});
     groupCollapsed.mockImplementationOnce(() => {
       throw new Error('boom');
@@ -240,12 +314,13 @@ describe('ConsoleSpanExporter', () => {
 
     exporter.export([fakeSpan(), fakeSpan({ name: 'second.span' })], callback);
 
-    // First span threw and was reported; the second still rendered.
     expect(diagError).toHaveBeenCalledTimes(1);
     expect(groupCollapsed).toHaveBeenCalledTimes(2);
-    expect(groupCollapsed.mock.calls[1]?.[0]).toContain('second.span');
+    expect(headerOf(groupCollapsed.mock.calls[1]).message).toContain(
+      'second.span',
+    );
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith({ code: ExportResultCode.SUCCESS });
+    expect(callback).toHaveBeenCalledWith(FAILED);
   });
 
   it('reports SUCCESS exactly once for an empty batch', () => {
@@ -269,5 +344,48 @@ describe('ConsoleSpanExporter', () => {
       parentSpanId: undefined,
       name: 'checkout.submit',
     });
+  });
+
+  it('resolves shutdown and forceFlush', async () => {
+    const exporter = new ConsoleSpanExporter();
+    await expect(exporter.shutdown()).resolves.toBeUndefined();
+    await expect(exporter.forceFlush()).resolves.toBeUndefined();
+  });
+
+  it('prints nothing and reports FAILED after shutdown', async () => {
+    const exporter = new ConsoleSpanExporter();
+    const callback = vi.fn();
+
+    await exporter.shutdown();
+    exporter.export([fakeSpan()], callback);
+
+    expect(groupCollapsed).not.toHaveBeenCalled();
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(FAILED);
+  });
+
+  it('renders a span produced by a real TracerProvider', async () => {
+    const provider = new TracerProvider({
+      spanProcessors: [
+        new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() }),
+      ],
+    });
+    const tracer = provider.getTracer('smoke-test');
+
+    const parentSpan = tracer.startSpan('parent');
+    tracer
+      .startSpan('child', {}, trace.setSpan(context.active(), parentSpan))
+      .end();
+    parentSpan.end();
+    await provider.forceFlush();
+
+    expect(groupCollapsed).toHaveBeenCalledTimes(2);
+    expect(headerOf(groupCollapsed.mock.calls[0]).scope).toBe('smoke-test');
+    const child = dir.mock.calls[0]?.[0];
+    const parent = dir.mock.calls[1]?.[0];
+    expect(child.name).toBe('child');
+    expect(child.traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(child.parentSpanId).toBe(parent.spanId);
+    await provider.shutdown();
   });
 });

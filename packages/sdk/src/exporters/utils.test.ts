@@ -6,8 +6,13 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { describe, expect, it } from 'vitest';
-import type { BadgeLevel } from './types.ts';
-import { levelForSeverity, levelForStatus, stringifyBody } from './utils.ts';
+import type { BadgeLevel } from './utils.ts';
+import {
+  levelForSeverity,
+  levelForStatus,
+  MAX_HEADER_BODY_LENGTH,
+  stringifyBody,
+} from './utils.ts';
 
 describe('levelForSeverity', () => {
   it('maps trace severities to "trace"', () => {
@@ -88,16 +93,51 @@ describe('stringifyBody', () => {
     expect(stringifyBody(undefined)).toBe('undefined');
   });
 
-  it('falls back to String() when JSON.stringify throws on a circular body', () => {
-    const circular: Record<string, unknown> = {};
+  it('marks circular references and keeps repeated non-circular ones', () => {
+    const shared = { x: 1 };
+    const circular: Record<string, unknown> = { a: shared, b: shared };
     circular['self'] = circular;
-    expect(stringifyBody(circular)).toBe('[object Object]');
+    expect(stringifyBody(circular)).toBe(
+      '{"a":{"x":1},"b":{"x":1},"self":"[Circular]"}',
+    );
   });
 
-  it('returns a placeholder when even String() throws (circular null-prototype body)', () => {
-    // No Object.prototype means no toString, so String() throws too.
-    const hostile: Record<string, unknown> = Object.create(null);
-    hostile['self'] = hostile;
+  it('writes bigint values with an "n" suffix', () => {
+    expect(stringifyBody({ id: 10n })).toBe('{"id":"10n"}');
+  });
+
+  it('shows an Error as "name: message"', () => {
+    expect(stringifyBody(new RangeError('too big'))).toBe(
+      'RangeError: too big',
+    );
+  });
+
+  it('falls back to String() when JSON.stringify throws', () => {
+    const hostile = {
+      get value(): never {
+        throw new Error('getter throws');
+      },
+    };
+    expect(stringifyBody(hostile)).toBe('[object Object]');
+  });
+
+  it('returns a placeholder when String() also throws (null-prototype body)', () => {
+    const hostile = Object.create(null, {
+      value: {
+        enumerable: true,
+        get(): never {
+          throw new Error('getter throws');
+        },
+      },
+    });
     expect(stringifyBody(hostile)).toBe('[unserializable body]');
+  });
+
+  it('truncates long bodies with an ellipsis', () => {
+    const long = 'x'.repeat(MAX_HEADER_BODY_LENGTH + 50);
+    expect(stringifyBody(long)).toBe(`${'x'.repeat(MAX_HEADER_BODY_LENGTH)}…`);
+    expect(stringifyBody('x'.repeat(MAX_HEADER_BODY_LENGTH))).toHaveLength(
+      MAX_HEADER_BODY_LENGTH,
+    );
   });
 });
